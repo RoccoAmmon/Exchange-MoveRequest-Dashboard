@@ -1,0 +1,9 @@
+# Lokale Arbeitskopien des Wikis
+.wiki/
+
+# PowerShell / Editor
+*.log
+.vscode/
+.vs/
+Thumbs.db
+Desktop.ini
