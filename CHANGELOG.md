@@ -3,6 +3,23 @@
 Alle bemerkenswerten Änderungen an **Exchange-MoveRequest-Dashboard**.
 Die Versionierung folgt `MAJOR.MINOR` – das Skript führt die Versionsnummer in `.NOTES`.
 
+## [2.4] – 08.10.2026
+
+### Neu
+- **Button „Abschließen" pro suspendierter Anforderung** – direkt hinter jeder Tabellenzeile
+  mit Status `Suspended` (`-SuspendWhenReadyToComplete`) **oder** `AutoSuspended`
+  (automatisches Anhalten). Er startet `Resume-MoveRequest` für genau diese eine Anforderung –
+  nicht für den ganzen Batch. Sobald sich der Status ändert, verschwindet der Button automatisch.
+- **`/api/move-aktion` akzeptiert `Identity`** einer einzelnen Anforderung – neben `BatchName`
+  und `Alle`. Die Identity kommt aus der Detailzeile, dadurch wird genau der angezeigte Job
+  fortgesetzt.
+
+### Geändert
+- Detailzeilen liefern die `Identity` des MoveRequests mit (Grundzeilen, Fehlerzeilen und
+  gecachte Volldaten) – Voraussetzung für das Einzelziel.
+- Der Auftrag einer Einzel-Aktion trägt keine Batch-Kennung mehr, damit am Auftrag kein
+  Batch-Button erscheint, der fälschlich den ganzen Batch fortsetzen würde.
+
 ## [2.3] – 07.10.2026
 
 ### Neu
