@@ -2,7 +2,7 @@
 
 [![GitLab-Projekt](https://img.shields.io/badge/GitLab-Projekt-FC6D26?logo=gitlab&logoColor=white)](https://gitlab.com/RoccoAmmon/Exchange-MoveRequest-Dashboard)
 [![Lizenz: MIT](https://img.shields.io/badge/Lizenz-MIT-4c1?logo=opensourceinitiative&logoColor=white)](LICENSE)
-[![Version 2.5](https://img.shields.io/badge/Version-2.5-007ec6)](CHANGELOG.md)
+[![Version 2.6](https://img.shields.io/badge/Version-2.6-007ec6)](CHANGELOG.md)
 [![Letzter Commit](https://img.shields.io/gitlab/last-commit/RoccoAmmon/Exchange-MoveRequest-Dashboard)](https://gitlab.com/RoccoAmmon/Exchange-MoveRequest-Dashboard/-/commits/main)
 [![Status: stabil](https://img.shields.io/badge/Status-stabil-brightgreen)](https://gitlab.com/RoccoAmmon/Exchange-MoveRequest-Dashboard/-/wikis/Architektur)
 [![Sprache: Deutsch](https://img.shields.io/badge/Sprache-Deutsch-005BBB?logoColor=white)](https://gitlab.com/RoccoAmmon/Exchange-MoveRequest-Dashboard/-/wikis/home)
@@ -33,6 +33,7 @@ Verschiebeanforderungen lassen sich direkt aus der Web-GUI starten, fortsetzen u
 | **Vorabtest** | `New-MoveRequest -WhatIf` vor dem eigentlichen Start (aus / erst prüfen dann verschieben / nur prüfen) |
 | **Priorität & BadItemLimit** | Auswahl in der GUI, werden direkt an `New-MoveRequest` übergeben |
 | **Stabil bei Last** | Snapshot-Cache, Stats-Cache, parallele Statistikabrufe, gedämmptes Log-Rotation – siehe [Stabilitätskern](#stabilitätskern-v20) |
+| **Zweite Instanz** | Läuft auf dem Ziel-Port schon ein Dashboard, wird diese **beim Start automatisch beendet** (sauber über `/api/stop`, sonst `Stop-Process`) – der Fehler 32 tritt gar nicht mehr auf. Abschaltbar mit `-KeinAutoStopp` |
 | **Filter** | Auf einen Move-Batch eingeschränkt starten (`-BatchName`), Quell-/Ziel-Datenbank frei wählbar |
 
 ## Voraussetzungen
@@ -84,6 +85,7 @@ Dashboard beenden: Schalter **„Server stoppen"** in der GUI oder `GET http://l
 | `-Parallelitaet` | `4` | Anzahl paralleler `Get-MoveRequestStatistics`-Abrufe (`1` = sequenziell) |
 | `-MaxDetailAbrufe` | `0` | Max. Statistikabrufe pro Sammlung, `0` = unbegrenzt |
 | `-KeinBrowser` | aus | Browser nicht automatisch öffnen |
+| `-KeinAutoStopp` | aus | Andere Instanz auf demselben Port **nicht** automatisch beenden |
 
 ## API-Routen
 
@@ -157,6 +159,12 @@ Get-CimInstance Win32_Process |
 Seit **v2.5** schreibt das Skript genau diese Daten (laufende Instanzen, Port-Listener, `netsh`-Reservierungen)
 automatisch ins Log, sobald der Start scheitert.
 
+Seit **v2.6** tritt der Fehler gar nicht mehr auf: Eine auf dem Ziel-Port laufende Instanz wird
+**vor** dem Start automatisch beendet – zuerst per HTTP geprüft (das findet auch eine in einer
+offenen Konsole gestartete Instanz, deren Prozess die Skriptdatei nicht in der Kommandozeile
+trägt), dann sauber über deren `/api/stop`, im Notfall per `Stop-Process`. Mit `-KeinAutoStopp`
+ist das deaktiviert.
+
 **Dashboard lädt, aber die Tabelle bleibt leer**
 Prüfen, ob überhaupt MoveRequests existieren (`Get-MoveRequest`) und ob der Exchange-Management-Zugriff
 aus der Shell funktioniert. Fehlermeldungen stehen im Log unter `C:\ExchangeMigrationLog`.
@@ -169,6 +177,7 @@ Alle Änderungen siehe [CHANGELOG.md](CHANGELOG.md).
 
 | Version | Schwerpunkt |
 |---|---|
+| 2.6 | Zweite Instanz auf demselben Port wird beim Start automatisch beendet (Fehler 32 vorab), `-KeinAutoStopp` |
 | 2.5 | Diagnose beim Startfehler: zweite Instanz, Port-Listener und URL-Reservierungen im Fehlerfall |
 | 2.4 | Button „Abschließen" pro suspendierter Anforderung, Einzelziel über `Identity` |
 | 2.3 | Schneller Erstablauf, parallele Statistikabrufe (Runspace-Pool), `-MaxDetailAbrufe` |

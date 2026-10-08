@@ -3,6 +3,31 @@
 Alle bemerkenswerten Änderungen an **Exchange-MoveRequest-Dashboard**.
 Die Versionierung folgt `MAJOR.MINOR` – das Skript führt die Versionsnummer in `.NOTES`.
 
+## [2.6] – 08.10.2026
+
+### Neu
+- **Andere Instanz wird beim Start automatisch beendet.** Startet das Skript, während auf
+  demselben Port bereits ein Dashboard läuft, wird diese Instanz jetzt *bevor* Zeit in
+  Snap-In und erste Sammlung fließt beendet – der klassische Fehler 32 tritt gar nicht mehr auf.
+  Ablauf in dieser Reihenfolge:
+  1. **HTTP-Prüfung** (`Test-DashboardAntwort`) – sieht auch eine in einer *offenen Konsole*
+     gestartete Instanz. Deren `powershell.exe` trägt den Skriptnamen nicht in der Kommandozeile,
+     eine reine Prozesssuche findet sie also nicht – und genau dieser Listener hält das
+     URL-Präfix, das dem eigenen Start fehlt.
+  2. **Sauberer Stopp** über die fremde `/api/stop`-Route (`Stop-AnderesDashboard`): die alte
+     Instanz schließt ihren HttpListener und gibt das Präfix frei. Der Prozess selbst darf
+     weiterleben (offener Konsolen-Prompt) – gehalten wurde nur das Präfix.
+  3. **Harter Stopp** per `Stop-Process` – ausschließlich bei Prozessen mit Skriptnamen *und*
+     genau diesem Port, und nur wenn Schritt 2 nicht reichte.
+  4. **Abbruch mit Hinweisen**, wenn das Präfix blockiert bleibt (manuelle Suche, anderer Port).
+- Neuer Parameter **`-KeinAutoStopp`** – deaktiviert das automatische Beenden, das Skript
+  begnügt sich dann mit einer Warnung im Log.
+- Instanzen auf *anderen* Ports bleiben unberührt, fremde Dienste auf dem Start-Port werden
+  als solche erkannt und protokolliert.
+- Neue Hilfsfunktionen `Get-DashboardProzess`, `Test-DashboardAntwort` und
+  `Stop-AnderesDashboard`. Die bisherige `Get-LaufendeDashboardInstanzen` liefert weiterhin
+  dieselben Textzeilen fürs Log – sie baut jetzt auf `Get-DashboardProzess` auf.
+
 ## [2.5] – 08.10.2026
 
 ### Geändert
