@@ -60,8 +60,9 @@
     Autor:          Rocco Ammon
     Erstelldatum:   26.02.2026
     Stand:          08.10.2026
-    Version:        2.7 (Mehrfachauswahl suspendierter Anforderungen -
-                            auswählen und mit einem Klick abschließen)
+    Version:        2.8 (Fehler 32 beim Start behoben: Port-Pruefung direkt
+                            vor dem Listener.Start() - neu dazu Light-Modus
+                            mit -Light)
     Voraussetzung:  Exchange Server 2019 On-Premises
     Log-Pfad:       C:\ExchangeMigrationLog
     HINWEIS:        Muss als Administrator ausgeführt werden (HttpListener benötigt dies)
@@ -210,30 +211,55 @@
                                  Entscheidend: der Zustand muss im Fehlerfall
                                  festgehalten werden - ein Port-Check DANACH findet
                                  nichts mehr, die Registrierung war sofort frei.
-                           - v2.6 Neu: Andere Instanz auf demselben Port wird beim
- automatisch beendet, bevor Zeit in Snap-In und erste
- fliessen. Ablauf: HTTP-Pruefung (sieht auch eine in
- offenen Konsole gestartete Instanz), dann sauberer Stopp
- /api/stop, dann erst hart ueber Stop-Process. Schlaegt
- das fehl, bricht der Start mit Hinweisen ab. Abschalten
- -KeinAutoStopp.
-                           - v2.6 Neu: Hilfsfunktionen Get-DashboardProzess,
--DashboardAntwort und Stop-AnderesDashboard.
- allein reicht nicht: eine in einer offenen
- gestartete Instanz traegt den Skriptnamen nicht in
- Kommandozeile.
-                           - v2.7 Neu: Mehrfachauswahl suspendierter Anforderungen.
- Zeile mit *Suspend*-Status hat jetzt ein Auswahlfeld neben dem
--Button. Darueber erscheint eine Leiste mit "Alle sichtbaren
-", "Auswahl abschliessen" (mit Zaehler) und "Auswahl
-". Die Auswahl ueberlebt den Tabelle-Render (der bei jedem
- komplett neu gebaut wird) und wird aufgeraeumt, sobald eine
- nicht mehr suspendiert ist.
-                           - v2.7 Neu: /api/move-aktion akzeptiert Identities als Array. Daraus
- EIN Hintergrund-Auftrag, der die Auswahl der Reihe nach
- - ein Fortschrittsbalken statt eines Requests pro Zeile.
- auffindbare Identities werden protokolliert und uebersprungen,
- Rest laeuft trotzdem.
+                            - v2.6 Neu: Andere Instanz auf demselben Port wird beim
+                                  Start automatisch beendet, bevor Zeit in Snap-In
+                                  und erste Sammlung fliessen. Ablauf:
+                                  HTTP-Pruefung (sieht auch eine in offenen
+                                  Konsole gestartete Instanz), dann sauberer Stopp
+                                  ueber /api/stop, dann erst hart ueber
+                                  Stop-Process. Schlaegt das fehl, bricht der Start
+                                  mit Hinweisen ab. Abschalten mit -KeinAutoStopp.
+                            - v2.6 Neu: Hilfsfunktionen Get-DashboardProzess,
+                                  Test-DashboardAntwort und Stop-AnderesDashboard.
+                                  Die Prozesssuche allein reicht nicht: eine in
+                                  offener Konsole gestartete Instanz traegt den
+                                  Skriptnamen nicht in der Kommandozeile.
+                            - v2.7 Neu: Mehrfachauswahl suspendierter Anforderungen.
+                                  Jede Zeile mit Suspend-Status hat jetzt ein
+                                  Auswahlfeld neben dem Einzel-Button. Darueber
+                                  erscheint eine Leiste mit "Alle sichtbaren
+                                  auswaehlen", "Auswahl abschliessen" (mit Zaehler)
+                                  und "Auswahl aufheben". Die Auswahl ueberlebt den
+                                  Tabelle-Render (der bei jedem Poll komplett neu
+                                  gebaut wird) und wird aufgeraeumt, sobald eine
+                                  Anforderung nicht mehr suspendiert ist.
+                            - v2.7 Neu: /api/move-aktion akzeptiert Identities als
+                                  Array. Daraus entsteht EIN Hintergrund-Auftrag,
+                                  der die Auswahl der Reihe nach fortsetzt - ein
+                                  Fortschrittsbalken statt eines Requests pro Zeile.
+                                  Nicht auffindbare Identities werden protokolliert
+                                  und uebersprungen, der Rest laeuft trotzdem.
+                            - v2.8 Fix: "return , $Array" lieferte dem Aufrufer ein
+                                  Array mit EINEM leeren Element. Zusammen mit @()
+                                  entstand daraus die Fehlwarnung "Es laeuft bereits
+                                  eine weitere Dashboard-Instanz" samt der leeren
+                                  Logzeile "PID  (), Port :". Jetzt ohne Komma.
+                            - v2.8 Fix: Die Port-Pruefung lief nur EINMAL, und zwar
+                                  vor Snap-In und erster Sammlung. Liegt eine zweite
+                                  Instanz in diesem rund 11-Sekunden-Fenster, war
+                                  das URL-Praefix beim $Listener.Start() bereits
+                                  vergeben - Fehler 32. Jetzt wird direkt VOR jedem
+                                  Startversuch erneut geprueft und ggf. beendet,
+                                  nach Fehler 32 wird einmal nachgelegt
+                                  (hoechstens 3 Versuche, kein Ping-Pong).
+                                  Neue Funktion: Resolve-DashboardPortKonflikt.
+                            - v2.8 Neu: Parameter -Light (Alias -NurStatus) - nur
+                                  der Status der Verschiebeanforderungen, ohne
+                                  technische Werte. Get-MoveRequestStatistics
+                                  entfaellt vollstaendig, die Sammlung bleibt bei
+                                  den Grunddaten und ist dadurch deutlich schneller;
+                                  die technischen Spalten werden im Dashboard per
+                                  CSS ausgeblendet.
 
     BEI ENVELOPE-FEHLERN (Get-MoveRequestStatistics):
         In einer Exchange Management Shell ausführen und Skript neu starten:
@@ -258,6 +284,14 @@
     Holt die Statistikdetails mit bis zu 8 parallelen Abrufen und hoechstens
     100 Abfragen pro Sammlung. Der Rest wird in den folgenden Läufen
     nachgeholt - ideal bei mehreren hundert laufenden Verschiebungen.
+
+.EXAMPLE
+    .\Exchange-MoveRequest-Dashboard.ps1 -Light
+    Light-Modus (Alias -NurStatus): nur der Status der Verschiebeanforderungen
+    mit Name, Quell-/Ziel-Datenbank und Batch. Get-MoveRequestStatistics wird
+    gar nicht erst abgerufen - die Sammlung bleibt bei den Grunddaten aus
+    Get-MoveRequest und ist dadurch deutlich schneller. Prozent, Groessen,
+    Items und Zeiten fehlen und sind im Dashboard ausgeblendet.
 #>
 
 # ============================================================================
@@ -294,7 +328,11 @@ param(
     [switch]$KeinBrowser,
 
     [Parameter(Mandatory = $false, HelpMessage = "Andere Instanz auf demselben Port nicht automatisch beenden")]
-    [switch]$KeinAutoStopp
+    [switch]$KeinAutoStopp,
+
+    [Parameter(Mandatory = $false, HelpMessage = "Light-Modus: nur den Status der Verschiebeanforderungen, ohne technische Werte")]
+    [Alias("NurStatus")]
+    [switch]$Light
 )
 
 # ============================================================================
@@ -857,16 +895,29 @@ function New-Grundzeile {
         DetailOffen. Der naechste Sammlungslauf hoelt sie nach; das
         Frontend zeigt bis dahin einen neutralen "..."-Balken statt einer
         scheinbaren 0 %.
+
+        Mit -Light entfaellt der Nachlauf: es wird bewusst keine Statistik
+        abgerufen, die Platzhalter sind "-" und DetailOffen bleibt false.
     .PARAMETER MoveRequest
         Das MoveRequest-Objekt aus Get-MoveRequest.
+    .PARAMETER Light
+        Light-Modus: Zeile ohne technische Werte und sofort endgueltig.
     .OUTPUTS
         Hashtable mit derselben Feldstruktur wie eine volle Zeile.
     #>
     param(
-        [Parameter(Mandatory = $true)]$MoveRequest
+        [Parameter(Mandatory = $true)]$MoveRequest,
+
+        [Parameter(Mandatory = $false)][switch]$Light
     )
 
     $StatusString = if ($MoveRequest.Status) { [string]$MoveRequest.Status } else { "Unbekannt" }
+
+    # Light-Modus (-Light): es wird bewusst keine Statistik abgerufen, also
+    # gibt es auch keine technischen Werte. Die Zeile ist sofort endgueltig
+    # (DetailOffen $false) - sonst muesste das Frontend ewig auf Daten
+    # warten, die nie kommen.
+    $Platzhalter = if ($Light) { "-" } else { "..." }
 
     # Quell- und Ziel-Datenbank stehen bereits am MoveRequest – nur die
     # Detailangaben (Prozent, Groessen, Zeiten) brauchen die Statistik.
@@ -885,25 +936,25 @@ function New-Grundzeile {
         Alias                = Get-Text ($MoveRequest.DisplayName -replace '@.*', '')
         Identity             = Get-Text $MoveRequest.Identity
         Status               = $StatusString
-        StatusDetail         = "..."
+        StatusDetail         = $Platzhalter
         StatusFarbe          = (Get-StatusFarbe -Status $StatusString)
         StatusPrioritaet     = (Get-StatusPrioritaet -Status $StatusString)
         Aktiv                = ($StatusAktiv -contains $StatusString)
         ProzentAbgeschlossen = 0
         BalkenFarbe          = '#e9ecef'      # hellgrau = wird geladen, nicht 0 %
-        BytesUebertragen     = "..."
-        GesamtGroesse        = "..."
-        ItemsUebertragen     = "..."
-        BadItemsGefunden     = "..."
-        LargeItemsGefunden   = "..."
+        BytesUebertragen     = $Platzhalter
+        GesamtGroesse        = $Platzhalter
+        ItemsUebertragen     = $Platzhalter
+        BadItemsGefunden     = $Platzhalter
+        LargeItemsGefunden   = $Platzhalter
         QuellDatenbank       = $Quelle
         ZielDatenbank        = $Ziel
         BatchName            = Get-Text $MoveRequest.BatchName
-        StartZeit            = "..."
-        AbschlussZeit        = "..."
-        Nachricht            = "Detaildaten werden nachgeladen"
+        StartZeit            = $Platzhalter
+        AbschlussZeit        = $Platzhalter
+        Nachricht            = if ($Light) { "" } else { "Detaildaten werden nachgeladen" }
         StatistikFehler      = $false
-        DetailOffen          = $true
+        DetailOffen          = (-not [bool]$Light)
     }
 }
 
@@ -991,7 +1042,12 @@ function Get-DashboardProzess {
         # der eigentliche Fehler wird dadurch nie versteckt.
     }
 
-    return , $Treffer
+    # WICHTIG: KEIN Komma-Operator. "return , $Treffer" liefert dem Aufrufer
+    # ein Array, dessen EINZIGES Element wiederum ein Array ist. Der Aufrufer
+    # wickelt das mit @() um und bekommt ein Element mit leeren Feldern -
+    # es entstand die Fehlwarnung "Es laeuft bereits eine weitere
+    # Dashboard-Instanz" samt der leeren Logzeile "PID  (), Port :".
+    return $Treffer
 }
 
 function Get-LaufendeDashboardInstanzen {
@@ -1008,7 +1064,9 @@ function Get-LaufendeDashboardInstanzen {
         $Zeilen += "PID $($Prozess.Pid) ($($Prozess.Prozess)), Port $($Prozess.Port): $($Prozess.CommandLine)"
     }
 
-    return , $Zeilen
+    # Siehe Get-DashboardProzess: kein Komma-Operator, sonst entsteht beim
+    # Aufrufer mit @(...) ein Phantom-Element ohne Inhalt.
+    return $Zeilen
 }
 
 function Test-DashboardAntwort {
@@ -1113,6 +1171,122 @@ function Stop-AnderesDashboard {
     return $false
 }
 
+function Resolve-DashboardPortKonflikt {
+    <#
+    .SYNOPSIS
+        Prueft einen Port auf ein zweites Dashboard und raeumt das
+        URL-Praefix frei (Auto-Stopp ueber /api/stop, sonst hart).
+    .DESCRIPTION
+        Die gleiche Pruefung laeuft an mehreren Stellen: frueh im Start
+        (bevor Zeit in Snap-In und erste Sammlung fliesset), direkt vor
+        JEDEM Versuch, den HttpListener zu starten, und nach einem
+        Fehler 32.
+
+        Genau dieses Zwischenfenster ist der Grund fuer die Wiederholung:
+        zwischen der Startpruefung und $Listener.Start() liegen rund
+        11 Sekunden Exchange-Sammlung. Darin kann eine zweite Instanz das
+        Praefix uebernehmen - im Praxistest war der Port um 12:00:22 noch
+        frei und um 12:00:33 belegt, der Start schlug mit Fehler 32 fehl.
+
+        Ein Aufruf bei freiem Port ist billig: nur ein sofort fehlschlagender
+        Verbindungsversuch, keine Wartezeit.
+    .PARAMETER Port
+        Zu pruefender Port (Parameter -Port).
+    .PARAMETER BasisUrl
+        Basis-URL des Dashboards, z.B. http://localhost:8585/.
+    .PARAMETER Phase
+        Kennung fuer die Logzeile, z.B. "Startpruefung" oder "Startversuch 2".
+    .PARAMETER KeinAutoStopp
+        Gefundene Instanz nicht beenden, nur melden.
+    .PARAMETER MeldeFreieProzesse
+        Auch dann melden, wenn der Port frei ist, aber andere
+        Dashboard-Prozesse laufen (anderer Port oder gerade am Starten).
+    .OUTPUTS
+        "Frei"      nichts haelt den Port (mehr)
+        "Belegt"    ein weiteres Dashboard haelt das Praefix weiterhin
+        "Fremd"     ein fremder Dienst antwortet
+        "OhneStopp" Dashboard gefunden, aber -KeinAutoStopp gesetzt
+    #>
+    param(
+        [Parameter(Mandatory = $true)][int]$Port,
+        [Parameter(Mandatory = $true)][string]$BasisUrl,
+        [Parameter(Mandatory = $false)][string]$Phase = "Portpruefung",
+        [Parameter(Mandatory = $false)][switch]$KeinAutoStopp,
+        [Parameter(Mandatory = $false)][switch]$MeldeFreieProzesse
+    )
+
+    $PortZustand = Test-DashboardAntwort -Url $BasisUrl
+
+    if ($PortZustand -eq "Fremd") {
+        Write-Log -Nachricht "${Phase}: Auf Port $Port antwortet ein fremder Dienst - der Start wird voraussichtlich fehlschlagen." -Typ "WARNUNG"
+        return "Fremd"
+    }
+
+    if ($PortZustand -ne "Dashboard") {
+        # Port frei. Auf Wunsch trotzdem nach Prozessen mit Skriptnamen
+        # suchen - eine solche Instanz kann gerade erst am Starten sein
+        # oder ihren Port auf einem anderen halten.
+        if ($MeldeFreieProzesse) {
+            $WeitereInstanzen = @(Get-LaufendeDashboardInstanzen)
+            if ($WeitereInstanzen.Count -gt 0) {
+                $Anzahl  = $WeitereInstanzen.Count
+                $Meldung = "Es laeuft bereits eine weitere Dashboard-Instanz:"
+                if ($Anzahl -gt 1) { $Meldung = "Es laeuft bereits $Anzahl weitere Dashboard-Instanzen:" }
+                Write-Log -Nachricht "HINWEIS: $Meldung" -Typ "WARNUNG"
+                foreach ($Instanz in $WeitereInstanzen) {
+                    Write-Log -Nachricht "  $Instanz" -Typ "INFO"
+                }
+            }
+        }
+        return "Frei"
+    }
+
+    # --- ein weiteres Dashboard antwortet -----------------------------------
+    $AndereInstanzen = @(Get-DashboardProzess -Port $Port)
+
+    if ($KeinAutoStopp) {
+        Write-Log -Nachricht "${Phase}: Auf Port $Port laeuft bereits ein Dashboard - wird NICHT gestoppt (-KeinAutoStopp)." -Typ "WARNUNG"
+        foreach ($Prozess in $AndereInstanzen) {
+            Write-Log -Nachricht "  PID $($Prozess.Pid) ($($Prozess.Prozess)): $($Prozess.CommandLine)" -Typ "INFO"
+        }
+        if ($AndereInstanzen.Count -eq 0) {
+            Write-Log -Nachricht "  (kein Prozess mit Skriptnamen gefunden - vermutlich in einer offenen Konsole gestartet)" -Typ "INFO"
+        }
+        return "OhneStopp"
+    }
+
+    Write-Log -Nachricht "${Phase}: Auf Port $Port laeuft bereits ein Dashboard - die alte Instanz wird jetzt beendet." -Typ "WARNUNG"
+    foreach ($Prozess in $AndereInstanzen) {
+        Write-Log -Nachricht "  Laufende Instanz: PID $($Prozess.Pid) ($($Prozess.Prozess)), Port $($Prozess.Port): $($Prozess.CommandLine)" -Typ "INFO"
+    }
+    if ($AndereInstanzen.Count -eq 0) {
+        Write-Log -Nachricht "  (kein Prozess mit Skriptnamen gefunden - Konsole? Der Stopp laeuft trotzdem ueber /api/stop)" -Typ "INFO"
+    }
+
+    $PraefixFrei = Stop-AnderesDashboard -BasisUrl $BasisUrl
+
+    if (-not $PraefixFrei) {
+        # Die andere Instanz hat nicht reagiert (Request-Loop haengt?).
+        # Jetzt hart beenden - ausschliesslich Prozesse mit Skriptnamen
+        # UND genau diesem Port.
+        $AndereHart = @(Get-DashboardProzess -Port $Port)
+        foreach ($Prozess in $AndereHart) {
+            Write-Log -Nachricht "  Sauberer Stopp reichte nicht - beende hart: PID $($Prozess.Pid) ($($Prozess.Prozess))" -Typ "WARNUNG"
+            try { Stop-Process -Id $Prozess.Pid -Force -ErrorAction Stop }
+            catch { Write-Log -Nachricht "  PID $($Prozess.Pid) konnte nicht beendet werden: $($_.Exception.Message)" -Typ "WARNUNG" }
+        }
+        if ($AndereHart.Count -gt 0) { Start-Sleep -Seconds 2 }
+        $PraefixFrei = ((Test-DashboardAntwort -Url $BasisUrl) -ne "Dashboard")
+    }
+
+    if ($PraefixFrei) {
+        Write-Log -Nachricht "${Phase}: Alte Instanz beendet - $BasisUrl ist frei, der Start kann weitergehen." -Typ "INFO"
+        return "Frei"
+    }
+
+    return "Belegt"
+}
+
 function Get-PortDiagnose {
     <#
     .SYNOPSIS
@@ -1174,7 +1348,9 @@ function Get-PortDiagnose {
         $Zeilen += "URL-Reservierung fuer Port ${Port}: keine vorhanden (kein netsh-Eintrag noetig)."
     }
 
-    return , $Zeilen
+    # Siehe Get-DashboardProzess: kein Komma-Operator, sonst entsteht beim
+    # Aufrufer mit @(...) ein Phantom-Element ohne Inhalt.
+    return $Zeilen
 }
 
 # ============================================================================
@@ -2443,8 +2619,11 @@ function Get-MoveRequestDaten {
                 }
             }
 
-            # Grunddaten-Lauf: gar keine Statistikabrufe
-            if ($ErsterLauf) { continue }
+            # Grunddaten-Lauf: gar keine Statistikabrufe. Ebenso der
+            # Light-Modus (-Light): dort werden GRUNDSAETZLICH keine
+            # technischen Werte abgefragt - das ist der ganze Zweck des
+            # Schalters und der Grund, warum er schneller laeuft.
+            if ($ErsterLauf -or $Light) { continue }
 
             # Alle Kandidaten sammeln - die Abrufgrenze greift erst nach der
             # Sortierung, damit offene Details zuerst drankommen.
@@ -2486,10 +2665,16 @@ function Get-MoveRequestDaten {
             }
 
             if (-not $AbrufErgebnisse.ContainsKey($Schluessel)) {
-                # Detaildaten noch offen - Grundzeile, wird nachgeladen
-                $DetailDaten.Add((New-Grundzeile -MoveRequest $MoveRequest))
-                $NeueOffene[$Schluessel] = $true
-                $Offen++
+                # Detaildaten noch offen - Grundzeile, wird nachgeladen.
+                # Im Light-Modus ist die Zeile dagegen sofort endgueltig:
+                # Details werden nie angefordert, also duerfen sie auch
+                # nicht als "offen" zaehlen (sonst laeuft das Dashboard
+                # ewig im Nachhol-Modus).
+                $DetailDaten.Add((New-Grundzeile -MoveRequest $MoveRequest -Light:([bool]$Light)))
+                if (-not $Light) {
+                    $NeueOffene[$Schluessel] = $true
+                    $Offen++
+                }
                 continue
             }
 
@@ -2681,6 +2866,17 @@ function Get-DashboardHTML {
         für automatische Live-Updates via AJAX (Fetch-API).
         Die Sortierung priorisiert aktive Jobs oben in der Tabelle.
     #>
+
+    # Light-Modus (-Light): die technischen Spalten werden per CSS
+    # ausgeblendet, weil sie gar nicht gefuellt sind - es wird keine
+    # Statistik abgerufen, darum gibt es keine Prozentwerte, Groessen
+    # oder Zeiten zu zeigen.
+    $LightCSS = ""
+    if ($Light) { $LightCSS = "        .spalte-technisch { display: none; }" }
+
+    # Kennzeichnung in der Fusszeile, damit man den Modus im Browser sieht.
+    $LightFussnote = ""
+    if ($Light) { $LightFussnote = " Light-Modus |" }
 
     $HTML = @"
 <!DOCTYPE html>
@@ -3157,6 +3353,11 @@ function Get-DashboardHTML {
             text-transform: uppercase;
             letter-spacing: 1px;
         }
+
+        /* ============ Light-Modus (-Light) ============ */
+        /* Technische Spalten ausblenden - sie werden im Light-Modus nicht
+           geliefert und trugen sonst nur Bindestriche. */
+$LightCSS
     </style>
 </head>
 <body>
@@ -3337,17 +3538,17 @@ function Get-DashboardHTML {
                     <tr>
                         <th>Anzeigename</th>
                         <th>Status</th>
-                        <th>Statusdetail</th>
-                        <th>Fortschritt</th>
-                        <th>Übertragen</th>
-                        <th>Gesamtgröße</th>
-                        <th>Items</th>
-                        <th>Bad Items</th>
+                        <th class="spalte-technisch">Statusdetail</th>
+                        <th class="spalte-technisch">Fortschritt</th>
+                        <th class="spalte-technisch">Übertragen</th>
+                        <th class="spalte-technisch">Gesamtgröße</th>
+                        <th class="spalte-technisch">Items</th>
+                        <th class="spalte-technisch">Bad Items</th>
                         <th>Quell-DB</th>
                         <th>Ziel-DB</th>
                         <th>Batch</th>
-                        <th>Start</th>
-                        <th>Abschluss</th>
+                        <th class="spalte-technisch">Start</th>
+                        <th class="spalte-technisch">Abschluss</th>
                     </tr>
                 </thead>
                 <tbody id="tabellenBody"></tbody>
@@ -3358,7 +3559,7 @@ function Get-DashboardHTML {
     <!-- Footer -->
     <div class="footer">
         <p>Exchange MoveRequest Live-Dashboard | PowerShell HttpListener |
-           Intervall: $AktualisierungsIntervall s |
+           Intervall: $AktualisierungsIntervall s |$LightFussnote
            <a href="/api/data" target="_blank" style="color: #0078d4;">JSON-API</a> |
            <a href="#" onclick="stopServer()" style="color: #dc3545;">Server stoppen</a>
         </p>
@@ -4661,6 +4862,9 @@ try {
     Write-Log -Nachricht "=== Live-Dashboard wird gestartet ===" -Typ "INFO"
     Write-Log -Nachricht "Intervall: $AktualisierungsIntervall s | Snapshot-Cache: $CacheIntervall s | Abfrage-Timeout: $AbfrageTimeout s | Leerlaufintervall: $LeerlaufIntervall s" -Typ "INFO"
     if ($BatchName) { Write-Log -Nachricht "Batch-Filter aktiv: $BatchName" -Typ "INFO" }
+    if ($Light) {
+        Write-Log -Nachricht "Light-Modus aktiv (-Light): es werden nur Statusdaten geliefert - Get-MoveRequestStatistics bleibt aus, technische Spalten sind im Dashboard ausgeblendet." -Typ "INFO"
+    }
 
     # --- Laeuft schon eine Instanz auf diesem Port? -------------------------
     # Nur ein HttpListener kann das URL-Praefix belegen. Deshalb wird zuerst
@@ -4670,71 +4874,20 @@ try {
     # Gefunden wird sauber ueber /api/stop beendet, bevor Zeit in Snap-In und
     # erste Sammlung investiert wird.
     $PruefURL    = "http://localhost:$Port/"
-    $PortZustand = Test-DashboardAntwort -Url $PruefURL
+    $PortZustand = Resolve-DashboardPortKonflikt -Port $Port -BasisUrl $PruefURL `
+                                                 -Phase "Startpruefung" `
+                                                 -KeinAutoStopp:$KeinAutoStopp `
+                                                 -MeldeFreieProzesse
 
-    if ($PortZustand -eq "Dashboard") {
-        $AndereInstanzen = @(Get-DashboardProzess -Port $Port)
-
-        if ($KeinAutoStopp) {
-            Write-Log -Nachricht "HINWEIS: Auf Port $Port laeuft bereits ein Dashboard - wird NICHT gestoppt (-KeinAutoStopp)." -Typ "WARNUNG"
-            foreach ($Prozess in $AndereInstanzen) {
-                Write-Log -Nachricht "  PID $($Prozess.Pid) ($($Prozess.Prozess)): $($Prozess.CommandLine)" -Typ "INFO"
-            }
-            Write-Log -Nachricht "Der Start wird mit Fehler 32 scheitern - siehe Fehlerbehebung im Wiki." -Typ "WARNUNG"
-        }
-        else {
-            Write-Log -Nachricht "Auf Port $Port laeuft bereits ein Dashboard - die alte Instanz wird jetzt beendet." -Typ "WARNUNG"
-            foreach ($Prozess in $AndereInstanzen) {
-                Write-Log -Nachricht "  Laufende Instanz: PID $($Prozess.Pid) ($($Prozess.Prozess)), Port $($Prozess.Port): $($Prozess.CommandLine)" -Typ "INFO"
-            }
-            if ($AndereInstanzen.Count -eq 0) {
-                Write-Log -Nachricht "  (kein Prozess mit Skriptnamen gefunden - Konsole? Der Stopp laeuft trotzdem ueber /api/stop)" -Typ "INFO"
-            }
-
-            $PraefixFrei = Stop-AnderesDashboard -BasisUrl $PruefURL
-
-            if (-not $PraefixFrei) {
-                # Die andere Instanz hat nicht reagiert (Request-Loop
-                # haengt?). Jetzt Prozesse hart beenden - ausschliesslich
-                # solche mit Skriptnamen UND genau diesem Port.
-                $Zaeter = @(Get-DashboardProzess -Port $Port)
-                foreach ($Prozess in $Zaeter) {
-                    Write-Log -Nachricht "  Sauberer Stopp reichte nicht - beende hart: PID $($Prozess.Pid) ($($Prozess.Prozess))" -Typ "WARNUNG"
-                    try { Stop-Process -Id $Prozess.Pid -Force -ErrorAction Stop }
-                    catch { Write-Log -Nachricht "  PID $($Prozess.Pid) konnte nicht beendet werden: $($_.Exception.Message)" -Typ "WARNUNG" }
-                }
-                if ($Zaeter.Count -gt 0) { Start-Sleep -Seconds 2 }
-                $PraefixFrei = ((Test-DashboardAntwort -Url $PruefURL) -ne "Dashboard")
-            }
-
-            if ($PraefixFrei) {
-                Write-Log -Nachricht "Alte Instanz beendet - $PruefURL ist frei, der Start kann weitergehen." -Typ "INFO"
-            }
-            else {
-                Write-Log -Nachricht "Die andere Instanz laeuft weiter und haelt $PruefURL - Start abgebrochen." -Typ "FEHLER"
-                Write-Log -Nachricht "  Manuell suchen: Get-CimInstance Win32_Process | Where-Object { `$_.CommandLine -match 'Moverequest-Dashboard' } | Select-Object ProcessId, CommandLine" -Typ "INFO"
-                Write-Log -Nachricht "  Oder abweichend starten: .\Exchange-MoveRequest-Dashboard.ps1 -Port 9090" -Typ "INFO"
-                throw "Port $Port ist durch eine andere Dashboard-Instanz belegt."
-            }
-        }
+    if ($PortZustand -eq "Belegt") {
+        Write-Log -Nachricht "Die andere Instanz laeuft weiter und haelt $PruefURL - Start abgebrochen." -Typ "FEHLER"
+        Write-Log -Nachricht "  Manuell suchen: Get-CimInstance Win32_Process | Where-Object { `$_.CommandLine -match 'Moverequest-Dashboard' } | Select-Object ProcessId, CommandLine" -Typ "INFO"
+        Write-Log -Nachricht "  Oder abweichend starten: .\Exchange-MoveRequest-Dashboard.ps1 -Port 9090" -Typ "INFO"
+        throw "Port $Port ist durch eine andere Dashboard-Instanz belegt."
     }
-    elseif ($PortZustand -eq "Fremd") {
-        Write-Log -Nachricht "ACHTUNG: Auf Port $Port antwortet ein fremder Dienst - der Start wird voraussichtlich fehlschlagen." -Typ "WARNUNG"
-    }
-    else {
-        # Port frei - trotzdem nach Prozessen mit Skriptnamen suchen, denn
-        # eine solche Instanz kann gerade erst am Starten sein oder haelt
-        # den Port auf einem anderen.
-        $WeitereInstanzen = @(Get-LaufendeDashboardInstanzen)
-        if ($WeitereInstanzen.Count -gt 0) {
-            $Anzahl  = $WeitereInstanzen.Count
-            $Meldung = "Es laeuft bereits eine weitere Dashboard-Instanz:"
-            if ($Anzahl -gt 1) { $Meldung = "Es laeuft bereits $Anzahl weitere Dashboard-Instanzen:" }
-            Write-Log -Nachricht "HINWEIS: $Meldung" -Typ "WARNUNG"
-            foreach ($Instanz in $WeitereInstanzen) {
-                Write-Log -Nachricht "  $Instanz" -Typ "INFO"
-            }
-        }
+
+    if ($PortZustand -eq "OhneStopp") {
+        Write-Log -Nachricht "Der Start wird voraussichtlich mit Fehler 32 scheitern - siehe Fehlerbehebung im Wiki." -Typ "WARNUNG"
     }
 
     # --- Exchange 2019 PowerShell Snap-in laden ---
@@ -4765,36 +4918,81 @@ try {
         }
     }
 
-    # --- HTTP-Listener erstellen und starten ---
-    try {
-        $Listener = New-Object System.Net.HttpListener
-        $Listener.Prefixes.Add($BaseURL)
+    # --- HTTP-Listener erstellen und starten -------------------------------
+    # ZWISCHEN der Startpruefung weiter oben und hier liegen Snap-In und die
+    # erste Sammlung (im Praxistest 11 s). Reicht genau diese Zeit, um das
+    # URL-Praefix zu verlieren? Genau so ist Fehler 32 entstanden: um
+    # 12:00:22 war der Port noch frei, um 12:00:33 hielt eine zweite Instanz
+    # das Praefix. Deshalb wird VOR jedem Versuch erneut geprueft und ggf.
+    # beendet, und nach einem Fehler 32 einmal nachgelegt. Hoechstens
+    # $MaxStartVersuche Versuche - mehr braucht es nicht, und ein
+    # Ping-Pong zwischen zwei Instanzen kann so nicht entstehen.
+    $MaxStartVersuche = 3
+    $StartVersuch     = 0
+    $StartFehler      = $null
 
-        # Verhindert, dass ein abgebrochener Browser-Request eine Exception
-        # in der Schreibpipeline ausloest. Zusammen mit dem finally-Block
-        # unten verhindert das die Verbindungslecks.
-        $Listener.IgnoreWriteExceptions = $true
+    while ($true) {
+        $StartVersuch++
 
-        $Listener.Start()
+        # Erneute Pruefung - auch beim ersten Versuch, denn die
+        # Startpruefung weiter oben ist inzwischen her.
+        $ZustandJetzt = Resolve-DashboardPortKonflikt -Port $Port -BasisUrl $PruefURL `
+                                                      -Phase "Startversuch $StartVersuch" `
+                                                      -KeinAutoStopp:$KeinAutoStopp
+        if ($ZustandJetzt -eq "Belegt") {
+            Write-Log -Nachricht "Das Praefix '$BaseURL' haelt weiterhin eine andere Instanz." -Typ "WARNUNG"
+        }
+
+        try {
+            $Listener = New-Object System.Net.HttpListener
+            $Listener.Prefixes.Add($BaseURL)
+
+            # Verhindert, dass ein abgebrochener Browser-Request eine Exception
+            # in der Schreibpipeline ausloest. Zusammen mit dem finally-Block
+            # unten verhindert das die Verbindungslecks.
+            $Listener.IgnoreWriteExceptions = $true
+
+            $Listener.Start()
+            $StartFehler = $null
+            break
+        }
+        catch {
+            $StartFehler = $_.Exception.Message
+            $IstPraefixKonflikt = ($StartFehler -match 'anderen Prozess|zugreifen|sharing violation|Access is denied|Zugriff verweigert')
+
+            # Nur bei einem Praefix-Konflikt nachlegen - und nur, wenn
+            # ueberhaupt gestoppt werden darf. Ohne Auto-Stopp muesste sich
+            # die andere Instanz im Kreis selbst beenden (Ping-Pong).
+            if ($IstPraefixKonflikt -and -not $KeinAutoStopp -and $StartVersuch -lt $MaxStartVersuche) {
+                Write-Log -Nachricht "Fehler beim Starten des HTTP-Servers: $StartFehler" -Typ "FEHLER"
+                Write-Log -Nachricht "Das URL-Praefix '$BaseURL' war zwischen Pruefung und Start belegt - neuer Versuch ($StartVersuch von $MaxStartVersuche) nach erneuter Freimachung." -Typ "WARNUNG"
+                try { $Listener.Close() } catch { }
+                continue
+            }
+
+            break
+        }
+    }
+
+    if ($null -eq $StartFehler) {
         Write-Log -Nachricht "HTTP-Server gestartet auf: $BaseURL" -Typ "INFO"
         Write-Log -Nachricht "Dashboard im Browser oeffnen: $BaseURL" -Typ "INFO"
         Write-Log -Nachricht "Zum Beenden: Strg+C oder im Dashboard 'Server stoppen' klicken." -Typ "INFO"
     }
-    catch {
-        $Grund = $_.Exception.Message
-        Write-Log -Nachricht "Fehler beim Starten des HTTP-Servers: $Grund" -Typ "FEHLER"
+    else {
+        Write-Log -Nachricht "Fehler beim Starten des HTTP-Servers: $StartFehler" -Typ "FEHLER"
 
         # Win32 Fehler 32 = das URL-Praefix ist bereits registriert.
         # DER MOMENT IST ENTSCHEIDEND: ein Port-Check danach findet nichts
         # mehr, denn die gescheiterte Registrierung war sofort wieder frei.
         # Deshalb hier sofort festhalten, was gerade zu sehen war.
-        if ($Grund -match 'anderen Prozess|zugreifen|sharing violation|Access is denied|Zugriff verweigert') {
+        if ($StartFehler -match 'anderen Prozess|zugreifen|sharing violation|Access is denied|Zugriff verweigert') {
             Write-Log -Nachricht "URSACHE: Das URL-Praefix '$BaseURL' war schon vergeben - fast immer durch ein zweites Dashboard. Auch die alte Version 'live_moverequest_statistik.ps1' reserviert denselben Port." -Typ "FEHLER"
 
-            foreach ($Instanz in Get-LaufendeDashboardInstanzen) {
+            foreach ($Instanz in @(Get-LaufendeDashboardInstanzen)) {
                 Write-Log -Nachricht "  Laufende Instanz: $Instanz" -Typ "INFO"
             }
-            foreach ($Diagnose in Get-PortDiagnose -Port $Port) {
+            foreach ($Diagnose in @(Get-PortDiagnose -Port $Port)) {
                 Write-Log -Nachricht "  $Diagnose" -Typ "INFO"
             }
 
@@ -4805,7 +5003,7 @@ try {
 
         Write-Log -Nachricht "TIPP: Skript als Administrator ausfuehren oder Port freigeben:" -Typ "INFO"
         Write-Log -Nachricht "  netsh http add urlacl url=$BaseURL user=$env:USERDOMAIN\$env:USERNAME" -Typ "INFO"
-        throw
+        throw $StartFehler
     }
 
     # --- Browser automatisch öffnen ---
