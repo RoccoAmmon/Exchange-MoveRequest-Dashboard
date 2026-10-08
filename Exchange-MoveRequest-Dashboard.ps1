@@ -59,8 +59,8 @@
     Autor:          Rocco Ammon
     Erstelldatum:   26.02.2026
     Stand:          08.10.2026
-    Version:        2.5 (Diagnose beim Start: zweite Instanz, Port-Listener
-                            und URL-Reservierungen im Fehlerfall protokolliert)
+    Version:        2.6 (Andere Instanz auf demselben Port wird beim Start
+                            automatisch beendet - Fehler 32 vorab)
     Voraussetzung:  Exchange Server 2019 On-Premises
     Log-Pfad:       C:\ExchangeMigrationLog
     HINWEIS:        Muss als Administrator ausgeführt werden (HttpListener benötigt dies)
@@ -209,6 +209,18 @@
                                  Entscheidend: der Zustand muss im Fehlerfall
                                  festgehalten werden - ein Port-Check DANACH findet
                                  nichts mehr, die Registrierung war sofort frei.
+                           - v2.6 Neu: Andere Instanz auf demselben Port wird beim
+ automatisch beendet, bevor Zeit in Snap-In und erste
+ fliessen. Ablauf: HTTP-Pruefung (sieht auch eine in
+ offenen Konsole gestartete Instanz), dann sauberer Stopp
+ /api/stop, dann erst hart ueber Stop-Process. Schlaegt
+ das fehl, bricht der Start mit Hinweisen ab. Abschalten
+ -KeinAutoStopp.
+                           - v2.6 Neu: Hilfsfunktionen Get-DashboardProzess,
+-DashboardAntwort und Stop-AnderesDashboard.
+ allein reicht nicht: eine in einer offenen
+ gestartete Instanz traegt den Skriptnamen nicht in
+ Kommandozeile.
 
     BEI ENVELOPE-FEHLERN (Get-MoveRequestStatistics):
         In einer Exchange Management Shell ausführen und Skript neu starten:
@@ -266,7 +278,10 @@ param(
     [int]$MaxDetailAbrufe = 0,
 
     [Parameter(Mandatory = $false, HelpMessage = "Browser nicht automatisch öffnen")]
-    [switch]$KeinBrowser
+    [switch]$KeinBrowser,
+
+    [Parameter(Mandatory = $false, HelpMessage = "Andere Instanz auf demselben Port nicht automatisch beenden")]
+    [switch]$KeinAutoStopp
 )
 
 # ============================================================================
@@ -909,28 +924,31 @@ function Get-MoveRequestSchluessel {
     return "Name:$Name|Batch:$Batch"
 }
 
-function Get-LaufendeDashboardInstanzen {
+function Get-DashboardProzess {
     <#
     .SYNOPSIS
-        Liefert alle laufenden Prozesse, deren Kommandozeile auf eine
-        Dashboard-Skriptdatei zeigt - inklusive des alten Skriptnamens.
+        Liefert laufende Dashboard-Prozesse als Objekte (PID, Prozess,
+        Port, Kommandozeile).
     .DESCRIPTION
-        Fehlerursache Win32 32 beim HttpListener.Start():
-        "Der Prozess kann nicht auf die Datei zugreifen, da sie von einem
-        anderen Prozess verwendet wird."
+        Erkennt sowohl den aktuellen Skriptnamen als auch die alte Version
+        'live_moverequest_statistik.ps1'. Der Port wird aus der Kommandozeile
+        gelesen; fehlt -Port, gilt der Standardport 8585.
 
-        Das bedeutet NICHT, dass der Port per netstat belegt ist - es
-        heisst, das URL-Praefix http://localhost:<Port>/ ist bereits
-        registriert (durch ein zweites Dashboard). Der Port ist danach
-        sofort wieder frei, deshalb findet ein spaeterer Check nichts.
-        Aus genau diesem Grund werden die Prozesse im Fehlerfall direkt
-        mitprotokolliert.
+        GRENZE: Ein Dashboard, das in einer offenen Konsole gestartet wurde
+        (.\Exchange-MoveRequest-Dashboard.ps1 eingegeben), traegt den
+        Skriptnamen NICHT in der Kommandozeile der powershell.exe - solche
+        Instanzen sind hier unsichtbar. Fuer sie gibt es den HTTP-Weg
+        (Test-DashboardAntwort / Stop-AnderesDashboard).
+    .PARAMETER Port
+        Nur Prozesse mit diesem Port liefern. 0 = alle Ports.
     .OUTPUTS
-        Array von Textzeilen "PID <nr> (<prozess>) - <kommandozeile>".
-        Leer, wenn kein zweiter Prozess gefunden wurde.
+        Array von PSCustomObject. Leer, wenn nichts gefunden wurde.
     #>
+    param(
+        [Parameter(Mandatory = $false)][int]$Port = 0
+    )
 
-    $Zeilen = @()
+    $Treffer = @()
 
     try {
         $SkriptMuster = 'Exchange-MoveRequest-Dashboard\.ps1|live_moverequest_statistik\.ps1'
@@ -938,7 +956,21 @@ function Get-LaufendeDashboardInstanzen {
             Where-Object { $_.ProcessId -ne $PID -and $_.CommandLine -match $SkriptMuster })
 
         foreach ($Prozess in $Prozesse) {
-            $Zeilen += "PID $($Prozess.ProcessId) ($($Prozess.Name)): $($Prozess.CommandLine)"
+            $Kommandozeile = [string]$Prozess.CommandLine
+
+            $ProzessPort = 8585
+            if ($Kommandozeile -match '(?i)-Port[=\s]+(\d+)') {
+                $ProzessPort = [int]$Matches[1]
+            }
+
+            if ($Port -gt 0 -and $ProzessPort -ne $Port) { continue }
+
+            $Treffer += [pscustomobject]@{
+                Pid         = [int]$Prozess.ProcessId
+                Prozess     = [string]$Prozess.Name
+                Port        = $ProzessPort
+                CommandLine = $Kommandozeile
+            }
         }
     }
     catch {
@@ -946,7 +978,126 @@ function Get-LaufendeDashboardInstanzen {
         # der eigentliche Fehler wird dadurch nie versteckt.
     }
 
+    return , $Treffer
+}
+
+function Get-LaufendeDashboardInstanzen {
+    <#
+    .SYNOPSIS
+        Liefert alle laufenden Dashboard-Prozesse als Textzeilen fuer das Log.
+    .OUTPUTS
+        Array von Textzeilen "PID <nr> (<prozess>), Port <n>: <kommandozeile>".
+    #>
+
+    $Zeilen = @()
+
+    foreach ($Prozess in @(Get-DashboardProzess)) {
+        $Zeilen += "PID $($Prozess.Pid) ($($Prozess.Prozess)), Port $($Prozess.Port): $($Prozess.CommandLine)"
+    }
+
     return , $Zeilen
+}
+
+function Test-DashboardAntwort {
+    <#
+    .SYNOPSIS
+        Prueft, was auf einem Port antwortet: nichts, ein weiteres
+        Dashboard oder ein fremder Dienst.
+    .DESCRIPTION
+        Ein HTTP-Abruf ist die einzige verlaessliche Suche nach einer
+        zweiten Instanz. Die Prozesssuche uebersieht alles, was in einer
+        offenen Konsole gestartet wurde - und genau der antwortende
+        HttpListener haelt auch das URL-Praefix, das dem eigenen Start
+        fehlt (Win32 Fehler 32).
+    .PARAMETER Url
+        Basis-URL des Dashboards, z.B. http://localhost:8585/
+        (Endebruchstrich ist einzubauen.)
+    .OUTPUTS
+        ""          nichts erreichbar - Port ist frei bzw. laeuft nichts,
+                    das antwortet
+        "Dashboard" ein weiteres Dashboard antwortet (erkennbar am Titel)
+        "Fremd"     ein anderer Dienst antwortet
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string]$Url
+    )
+
+    try {
+        $Anfrage = [System.Net.HttpWebRequest]::Create($Url)
+        $Anfrage.Method           = "GET"
+        $Anfrage.Timeout          = 2000
+        $Anfrage.ReadWriteTimeout = 2000
+        $Anfrage.UserAgent        = "Exchange-MoveRequest-Dashboard-Startpruefung"
+        $Anfrage.AllowAutoRedirect = $false
+
+        $Antwort = $Anfrage.GetResponse()
+        $Stream  = $Antwort.GetResponseStream()
+        $Leser   = New-Object System.IO.StreamReader($Stream, [System.Text.Encoding]::UTF8)
+        $Inhalt  = $Leser.ReadToEnd()
+        $Leser.Close()
+        $Antwort.Close()
+
+        if ($Inhalt -match 'Exchange MoveRequest Live-Dashboard') { return "Dashboard" }
+        return "Fremd"
+    }
+    catch [System.Net.WebException] {
+        # Antwort kam, aber nicht 200 -> fremder Dienst.
+        if ($_.Exception.Response) { return "Fremd" }
+        # Verbindung abgelehnt, Timeout, DNS -> nichts erreichbar.
+        return ""
+    }
+    catch {
+        return ""
+    }
+}
+
+function Stop-AnderesDashboard {
+    <#
+    .SYNOPSIS
+        Beendet ein weiteres Dashboard auf dem Port sauber ueber seine
+        eigene /api/stop-Route.
+    .DESCRIPTION
+        Sauber heisst: die andere Instanz schliesst ihren HttpListener und
+        gibt damit das URL-Praefix frei. Der Prozess selbst darf weiterleben
+        (offene Konsole mit Prompt) - gehalten wird nur das Praefix, und
+        genau das ist der Grund fuer den Startfehler.
+
+        Danach wird bis zu -WartezeitSekunden nachgeprueft, ob die
+        Dashboard-Antwort verschwindet.
+    .PARAMETER BasisUrl
+        Basis-URL des Dashboards, z.B. http://localhost:8585/
+    .PARAMETER WartezeitSekunden
+        Maximal wartende Zeit auf das Freigeben des Praefixes (Standard 15).
+    .OUTPUTS
+        $true  das Praefix ist frei (antwortet nicht mehr mit Dashboard)
+        $false die andere Instanz antwortet noch
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string]$BasisUrl,
+
+        [Parameter(Mandatory = $false)][int]$WartezeitSekunden = 15
+    )
+
+    try {
+        $Anfrage = [System.Net.HttpWebRequest]::Create($BasisUrl + "api/stop")
+        $Anfrage.Method    = "GET"
+        $Anfrage.Timeout   = 3000
+        $Anfrage.UserAgent = "Exchange-MoveRequest-Dashboard-Start"
+
+        $Antwort = $Anfrage.GetResponse()
+        $Antwort.Close()
+        Write-Log -Nachricht "  /api/stop an die andere Instanz gesendet." -Typ "INFO"
+    }
+    catch {
+        Write-Log -Nachricht "  /api/stop nicht moeglich: $($_.Exception.Message)" -Typ "INFO"
+    }
+
+    for ($Versuch = 0; $Versuch -lt ($WartezeitSekunden * 2); $Versuch++) {
+        Start-Sleep -Milliseconds 500
+        if ((Test-DashboardAntwort -Url $BasisUrl) -ne "Dashboard") { return $true }
+    }
+
+    return $false
 }
 
 function Get-PortDiagnose {
@@ -4204,22 +4355,79 @@ try {
     Write-Log -Nachricht "Intervall: $AktualisierungsIntervall s | Snapshot-Cache: $CacheIntervall s | Abfrage-Timeout: $AbfrageTimeout s | Leerlaufintervall: $LeerlaufIntervall s" -Typ "INFO"
     if ($BatchName) { Write-Log -Nachricht "Batch-Filter aktiv: $BatchName" -Typ "INFO" }
 
-    # --- Laeuft schon eine zweite Instanz? ---------------------------------
-    # Nur ein HttpListener kann das URL-Praefix belegen. Liegt bereits ein
-    # zweiter Prozess auf der Skriptdatei, ist der Startausschlag vorherseh-
-    # bar - die Warnung kostet nichts und nennt gleich den Schuldigen.
-    $WeitereInstanzen = @(Get-LaufendeDashboardInstanzen)
-    if ($WeitereInstanzen.Count -gt 0) {
-        $Anzahl   = $WeitereInstanzen.Count
-        $Meldung  = "Es laeuft bereits eine weitere Dashboard-Instanz:"
-        if ($Anzahl -gt 1) {
-            $Meldung = "Es laeuft bereits $Anzahl weitere Dashboard-Instanzen:"
+    # --- Laeuft schon eine Instanz auf diesem Port? -------------------------
+    # Nur ein HttpListener kann das URL-Praefix belegen. Deshalb wird zuerst
+    # per HTTP gefragt, ob dort schon jemand antwortet - das ist der einzige
+    # Weg, auch eine in einer offenen Konsole gestartete Instanz zu finden
+    # (deren powershell.exe traegt den Skriptnamen nicht in der Kommandozeile).
+    # Gefunden wird sauber ueber /api/stop beendet, bevor Zeit in Snap-In und
+    # erste Sammlung investiert wird.
+    $PruefURL    = "http://localhost:$Port/"
+    $PortZustand = Test-DashboardAntwort -Url $PruefURL
+
+    if ($PortZustand -eq "Dashboard") {
+        $AndereInstanzen = @(Get-DashboardProzess -Port $Port)
+
+        if ($KeinAutoStopp) {
+            Write-Log -Nachricht "HINWEIS: Auf Port $Port laeuft bereits ein Dashboard - wird NICHT gestoppt (-KeinAutoStopp)." -Typ "WARNUNG"
+            foreach ($Prozess in $AndereInstanzen) {
+                Write-Log -Nachricht "  PID $($Prozess.Pid) ($($Prozess.Prozess)): $($Prozess.CommandLine)" -Typ "INFO"
+            }
+            Write-Log -Nachricht "Der Start wird mit Fehler 32 scheitern - siehe Fehlerbehebung im Wiki." -Typ "WARNUNG"
         }
-        Write-Log -Nachricht "HINWEIS: $Meldung" -Typ "WARNUNG"
-        foreach ($Instanz in $WeitereInstanzen) {
-            Write-Log -Nachricht "  $Instanz" -Typ "INFO"
+        else {
+            Write-Log -Nachricht "Auf Port $Port laeuft bereits ein Dashboard - die alte Instanz wird jetzt beendet." -Typ "WARNUNG"
+            foreach ($Prozess in $AndereInstanzen) {
+                Write-Log -Nachricht "  Laufende Instanz: PID $($Prozess.Pid) ($($Prozess.Prozess)), Port $($Prozess.Port): $($Prozess.CommandLine)" -Typ "INFO"
+            }
+            if ($AndereInstanzen.Count -eq 0) {
+                Write-Log -Nachricht "  (kein Prozess mit Skriptnamen gefunden - Konsole? Der Stopp laeuft trotzdem ueber /api/stop)" -Typ "INFO"
+            }
+
+            $PraefixFrei = Stop-AnderesDashboard -BasisUrl $PruefURL
+
+            if (-not $PraefixFrei) {
+                # Die andere Instanz hat nicht reagiert (Request-Loop
+                # haengt?). Jetzt Prozesse hart beenden - ausschliesslich
+                # solche mit Skriptnamen UND genau diesem Port.
+                $Zaeter = @(Get-DashboardProzess -Port $Port)
+                foreach ($Prozess in $Zaeter) {
+                    Write-Log -Nachricht "  Sauberer Stopp reichte nicht - beende hart: PID $($Prozess.Pid) ($($Prozess.Prozess))" -Typ "WARNUNG"
+                    try { Stop-Process -Id $Prozess.Pid -Force -ErrorAction Stop }
+                    catch { Write-Log -Nachricht "  PID $($Prozess.Pid) konnte nicht beendet werden: $($_.Exception.Message)" -Typ "WARNUNG" }
+                }
+                if ($Zaeter.Count -gt 0) { Start-Sleep -Seconds 2 }
+                $PraefixFrei = ((Test-DashboardAntwort -Url $PruefURL) -ne "Dashboard")
+            }
+
+            if ($PraefixFrei) {
+                Write-Log -Nachricht "Alte Instanz beendet - $PruefURL ist frei, der Start kann weitergehen." -Typ "INFO"
+            }
+            else {
+                Write-Log -Nachricht "Die andere Instanz laeuft weiter und haelt $PruefURL - Start abgebrochen." -Typ "FEHLER"
+                Write-Log -Nachricht "  Manuell suchen: Get-CimInstance Win32_Process | Where-Object { `$_.CommandLine -match 'Moverequest-Dashboard' } | Select-Object ProcessId, CommandLine" -Typ "INFO"
+                Write-Log -Nachricht "  Oder abweichend starten: .\Exchange-MoveRequest-Dashboard.ps1 -Port 9090" -Typ "INFO"
+                throw "Port $Port ist durch eine andere Dashboard-Instanz belegt."
+            }
         }
-        Write-Log -Nachricht "Wenn die auf demselben Port laeuft, bricht der Start gleich mit Fehler 32 ab." -Typ "WARNUNG"
+    }
+    elseif ($PortZustand -eq "Fremd") {
+        Write-Log -Nachricht "ACHTUNG: Auf Port $Port antwortet ein fremder Dienst - der Start wird voraussichtlich fehlschlagen." -Typ "WARNUNG"
+    }
+    else {
+        # Port frei - trotzdem nach Prozessen mit Skriptnamen suchen, denn
+        # eine solche Instanz kann gerade erst am Starten sein oder haelt
+        # den Port auf einem anderen.
+        $WeitereInstanzen = @(Get-LaufendeDashboardInstanzen)
+        if ($WeitereInstanzen.Count -gt 0) {
+            $Anzahl  = $WeitereInstanzen.Count
+            $Meldung = "Es laeuft bereits eine weitere Dashboard-Instanz:"
+            if ($Anzahl -gt 1) { $Meldung = "Es laeuft bereits $Anzahl weitere Dashboard-Instanzen:" }
+            Write-Log -Nachricht "HINWEIS: $Meldung" -Typ "WARNUNG"
+            foreach ($Instanz in $WeitereInstanzen) {
+                Write-Log -Nachricht "  $Instanz" -Typ "INFO"
+            }
+        }
     }
 
     # --- Exchange 2019 PowerShell Snap-in laden ---
