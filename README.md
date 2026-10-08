@@ -2,7 +2,7 @@
 
 [![GitLab-Projekt](https://img.shields.io/badge/GitLab-Projekt-FC6D26?logo=gitlab&logoColor=white)](https://gitlab.com/RoccoAmmon/Exchange-MoveRequest-Dashboard)
 [![Lizenz: MIT](https://img.shields.io/badge/Lizenz-MIT-4c1?logo=opensourceinitiative&logoColor=white)](LICENSE)
-[![Version 2.4](https://img.shields.io/badge/Version-2.4-007ec6)](CHANGELOG.md)
+[![Version 2.5](https://img.shields.io/badge/Version-2.5-007ec6)](CHANGELOG.md)
 [![Letzter Commit](https://img.shields.io/gitlab/last-commit/RoccoAmmon/Exchange-MoveRequest-Dashboard)](https://gitlab.com/RoccoAmmon/Exchange-MoveRequest-Dashboard/-/commits/main)
 [![Status: stabil](https://img.shields.io/badge/Status-stabil-brightgreen)](https://gitlab.com/RoccoAmmon/Exchange-MoveRequest-Dashboard/-/wikis/Architektur)
 [![Sprache: Deutsch](https://img.shields.io/badge/Sprache-Deutsch-005BBB?logoColor=white)](https://gitlab.com/RoccoAmmon/Exchange-MoveRequest-Dashboard/-/wikis/home)
@@ -138,8 +138,24 @@ Das Skript ist auch ohne diesen Wert lauffähig, da abgeschlossene Jobs nicht me
 **„Zugriff verweigert" / `HttpListenerException` beim Start**
 Skript muss in einer *administrativen* Shell laufen (HTTP-Reservierung).
 
-**Port bereits belegt**
-Anderen Port wählen: `-Port 9090` – und die URL im Browser entsprechend anpassen.
+**Fehler 32 beim Start – „… da sie von einem anderen Prozess verwendet wird"**
+Nicht der TCP-Port ist belegt, sondern die **URL-Präfix-Registrierung** `http://localhost:8585/`
+von `http.sys`. Verursacht durch ein zweites Dashboard – auch die alte Version
+`live_moverequest_statistik.ps1` reserviert denselben Port. Wichtig: **danach** ist der Port
+sofort wieder frei, ein `netstat`-Check nach dem Fehler findet deshalb nichts mehr.
+
+```powershell
+# laufende Instanzen suchen (nur zum Fehlerzeitpunkt aussagekräftig)
+Get-CimInstance Win32_Process |
+    Where-Object { $_.CommandLine -match 'Moverequest-Dashboard|live_moverequest_statistik' } |
+    Select-Object ProcessId, CommandLine
+
+# oder einfach mit abweichendem Port starten
+.\Exchange-MoveRequest-Dashboard.ps1 -Port 9090
+```
+
+Seit **v2.5** schreibt das Skript genau diese Daten (laufende Instanzen, Port-Listener, `netsh`-Reservierungen)
+automatisch ins Log, sobald der Start scheitert.
 
 **Dashboard lädt, aber die Tabelle bleibt leer**
 Prüfen, ob überhaupt MoveRequests existieren (`Get-MoveRequest`) und ob der Exchange-Management-Zugriff
@@ -153,6 +169,7 @@ Alle Änderungen siehe [CHANGELOG.md](CHANGELOG.md).
 
 | Version | Schwerpunkt |
 |---|---|
+| 2.5 | Diagnose beim Startfehler: zweite Instanz, Port-Listener und URL-Reservierungen im Fehlerfall |
 | 2.4 | Button „Abschließen" pro suspendierter Anforderung, Einzelziel über `Identity` |
 | 2.3 | Schneller Erstablauf, parallele Statistikabrufe (Runspace-Pool), `-MaxDetailAbrufe` |
 | 2.2 | WebGUI „Neue Verschiebeanforderung", Suspendierte fortsetzen, Abgeschlossene löschen, Vorabtest |

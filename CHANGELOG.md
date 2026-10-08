@@ -3,6 +3,26 @@
 Alle bemerkenswerten Änderungen an **Exchange-MoveRequest-Dashboard**.
 Die Versionierung folgt `MAJOR.MINOR` – das Skript führt die Versionsnummer in `.NOTES`.
 
+## [2.5] – 08.10.2026
+
+### Geändert
+- **Diagnose beim Startfehler des Webservers.** Bisher endete ein scheiternder
+  `$Listener.Start()` nur mit dem Win32-Text *„Der Prozess kann nicht auf die Datei zugreifen,
+  da sie von einem anderen Prozess verwendet wird"* (Fehler 32). Das Log nennt jetzt:
+  - die Ursache (URL-Präfix `http://localhost:<Port>/` war schon vergeben – fast immer ein
+    zweites Dashboard, auch die alte Skript-Version),
+  - **alle zum Fehlerzeitpunkt laufenden Dashboard-Prozesse** (PID, Name, Kommandozeile),
+  - die Port-Listener (PID/Prozess) und die URL-Reservierungen aus `netsh`,
+  - drei Abhilfen (andere Instanz beenden, anderer Port, Nachweis-Befehle).
+
+  Entscheidend ist der **Zeitpunkt**: Ein Port-Check *nach* dem Fehler findet nichts mehr,
+  weil die gescheiterte Registrierung sofort wieder freigegeben wird – die Spur ist dann kalt.
+
+### Neu
+- Beim Start werden weitere laufende Dashboard-Prozesse gesucht und bei Treffern protokolliert
+  (Warnung vor dem bekannten Fehler-32-Fall).
+- Neue Hilfsfunktionen `Get-LaufendeDashboardInstanzen` und `Get-PortDiagnose`.
+
 ## [2.4] – 08.10.2026
 
 ### Neu
