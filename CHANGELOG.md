@@ -3,6 +3,35 @@
 Alle bemerkenswerten Änderungen an **Exchange-MoveRequest-Dashboard**.
 Die Versionierung folgt `MAJOR.MINOR` – das Skript führt die Versionsnummer in `.NOTES`.
 
+## [2.7] – 08.10.2026
+
+### Neu
+- **Mehrfachauswahl suspendierter Anforderungen.** Jede Tabellenzeile mit Status `Suspended`
+  (`-SuspendWhenReadyToComplete`) oder `AutoSuspended` hat neben dem Einzel-Button von v2.4
+  jetzt ein **Auswahlfeld**. Darüber erscheint eine Leiste mit:
+  - **„Alle sichtbaren auswählen"** – nur die Zeilen, die der Suchfilter gerade zeigt,
+    **„Auswahl abschließen"** – mit Zähler, führt die Auswahl mit *einem* Klick aus,
+  - **„Auswahl aufheben"**.
+
+  Die Auswahl überlebt den Tabelle-Render (der bei jedem Poll komplett neu gebaut wird) und
+  wird aufgeräumt, sobald eine Anforderung nicht mehr suspendiert ist – es bleibt kein
+  Geisterhaken stehen. Während ein Auftrag läuft, sind die Schalter gesperrt.
+- **`/api/move-aktion` akzeptiert `Identities` als Array.** Daraus entsteht **ein**
+  Hintergrund-Auftrag, der die Auswahl der Reihe nach fortsetzt – ein Fortschrittsbalken
+  statt eines Requests pro Zeile. Auswahlregel: `Identities` → `Identity` → `Alle` → `BatchName`.
+- Identities, die sich nicht auflösen lassen (z. B. zwischenzeitlich abgeschlossene
+  Anforderungen), werden protokolliert und übersprungen; der Rest der Auswahl läuft trotzdem.
+- `Start-MoveAktion` arbeitet intern mit `$ZielIds` (dedupliziert, Leer-Einträge entfernt).
+  Der Einzelweg über `Identity` bleibt unverändert erhalten.
+- Das Wiki wurde korrigiert: die Werte von `Aktion` heißen `Resume`/`Entfernen`
+  (das Beispiel mit `remove` funktionierte nicht).
+
+### Getestet
+- 18 Prüfungen gegen `Start-MoveAktion` mit Stubs statt Exchange (Einzel-/Mehrfachziel,
+  fehlende Identities, Dubletten, Fehlermeldungen).
+- 38 Prüfungen der Frontend-Auswahl-Logik gegen einen DOM-Stub (Render-Überleben, Filter,
+  Prune bei Statuswechsel, Sperren während laufender Aktion).
+
 ## [2.6] – 08.10.2026
 
 ### Neu

@@ -2,7 +2,7 @@
 
 [![GitLab-Projekt](https://img.shields.io/badge/GitLab-Projekt-FC6D26?logo=gitlab&logoColor=white)](https://gitlab.com/RoccoAmmon/Exchange-MoveRequest-Dashboard)
 [![Lizenz: MIT](https://img.shields.io/badge/Lizenz-MIT-4c1?logo=opensourceinitiative&logoColor=white)](LICENSE)
-[![Version 2.6](https://img.shields.io/badge/Version-2.6-007ec6)](CHANGELOG.md)
+[![Version 2.7](https://img.shields.io/badge/Version-2.7-007ec6)](CHANGELOG.md)
 [![Letzter Commit](https://img.shields.io/gitlab/last-commit/RoccoAmmon/Exchange-MoveRequest-Dashboard)](https://gitlab.com/RoccoAmmon/Exchange-MoveRequest-Dashboard/-/commits/main)
 [![Status: stabil](https://img.shields.io/badge/Status-stabil-brightgreen)](https://gitlab.com/RoccoAmmon/Exchange-MoveRequest-Dashboard/-/wikis/Architektur)
 [![Sprache: Deutsch](https://img.shields.io/badge/Sprache-Deutsch-005BBB?logoColor=white)](https://gitlab.com/RoccoAmmon/Exchange-MoveRequest-Dashboard/-/wikis/home)
@@ -28,7 +28,7 @@ Verschiebeanforderungen lassen sich direkt aus der Web-GUI starten, fortsetzen u
 | **Live-Statistik** | Tabelle aller MoveRequests, aktualisiert per AJAX alle X Sekunden – **ohne** Seiten-Reload |
 | **Aktive Jobs zuerst** | `InProgress`, `CompletionInProgress` und `Queued` stehen immer oben, abgeschlossene/fehlgeschlagene darunter |
 | **Neue Verschiebung** | Postfächer einer Quell-Datenbank auswählen, Quelle/Ziel wählen, mit `New-MoveRequest` starten (eigener Hintergrund-Job, GUI bleibt bedienbar) |
-| **Suspendierte fortsetzen** | Button **„Abschließen"** direkt hinter jeder suspendierten Tabellenzeile (einzelne Anforderung), zusätzlich pro Batch und global: `Resume-MoveRequest` als Hintergrund-Job, Fortschritt über `/api/move-status` |
+| **Suspendierte fortsetzen** | Button **„Abschließen"** direkt hinter jeder suspendierten Tabellenzeile (einzelne Anforderung), **Mehrfachauswahl** mit Häkchen + „Auswahl abschließen" (ein Auftrag für die ganze Auswahl), zusätzlich pro Batch und global: `Resume-MoveRequest` als Hintergrund-Job, Fortschritt über `/api/move-status` |
 | **Abgeschlossene löschen** | Pro Auftrag und global: `Remove-MoveRequest` – räumt nur die MoveRequests auf, die Postfächer bleiben unberührt |
 | **Vorabtest** | `New-MoveRequest -WhatIf` vor dem eigentlichen Start (aus / erst prüfen dann verschieben / nur prüfen) |
 | **Priorität & BadItemLimit** | Auswahl in der GUI, werden direkt an `New-MoveRequest` übergeben |
@@ -97,7 +97,7 @@ Dashboard beenden: Schalter **„Server stoppen"** in der GUI oder `GET http://l
 | `/api/benutzer` | GET | Postfächer (`?quelle=NAME`; ohne Parameter alle Postfächer aller Datenbanken) |
 | `/api/move` | POST | Erstellt Verschiebeanforderungen (JSON: Quelle, Ziel, Benutzer, Suspend, Prioritaet, Vorabtest, BadItemLimit) |
 | `/api/move-status` | GET | Status und Ergebnisse gestarteter Verschiebeaufträge |
-| `/api/move-aktion` | POST | Suspendierte fortsetzen oder abgeschlossene löschen (JSON: Aktion, BatchName, Alle) |
+| `/api/move-aktion` | POST | Suspendierte fortsetzen oder abgeschlossene löschen (JSON: Aktion, BatchName, Alle, Identity bzw. Identities) |
 | `/api/stop` | GET | Stoppt den Webserver sauber |
 
 ## Stabilitätskern (v2.0)
@@ -177,6 +177,7 @@ Alle Änderungen siehe [CHANGELOG.md](CHANGELOG.md).
 
 | Version | Schwerpunkt |
 |---|---|
+| 2.7 | Mehrfachauswahl suspendierter Anforderungen – auswählen und mit einem Klick abschließen (`Identities`) |
 | 2.6 | Zweite Instanz auf demselben Port wird beim Start automatisch beendet (Fehler 32 vorab), `-KeinAutoStopp` |
 | 2.5 | Diagnose beim Startfehler: zweite Instanz, Port-Listener und URL-Reservierungen im Fehlerfall |
 | 2.4 | Button „Abschließen" pro suspendierter Anforderung, Einzelziel über `Identity` |
