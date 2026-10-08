@@ -52,15 +52,15 @@
       /api/move-status -> Status und Ergebnis der gestarteten Verschiebeauftraege
       /api/move-aktion -> Fortsetzen suspendierter oder Loeschen
                  abgeschlossener MoveRequests (POST, JSON-Body mit Aktion,
-                 BatchName und Alle)
+                 BatchName, Alle und optional Identity EINER Anforderung)
       /api/stop        -> Stoppt den Webserver sauber
 
 .NOTES
     Autor:          Rocco Ammon
     Erstelldatum:   26.02.2026
-    Stand:          07.10.2026
-    Version:        2.3 (schneller Erstablauf, parallele Statistikabrufe,
-                            Verschiebeanforderungen aus der WebGUI)
+    Stand:          08.10.2026
+    Version:        2.4 (Button "Abschließen" pro suspendierter Anforderung,
+                            Einzelziel via Identity in /api/move-aktion)
     Voraussetzung:  Exchange Server 2019 On-Premises
     Log-Pfad:       C:\ExchangeMigrationLog
     HINWEIS:        Muss als Administrator ausgeführt werden (HttpListener benötigt dies)
@@ -181,6 +181,21 @@
                                  Dashboard-Tabelle da ist - Postfaecher und Detaildaten
                                  laufen dann im Hintergrund weiter (v2.2 musste auf ALLES
                                  gewartet werden).
+                           - v2.4 Neu: Button "Abschließen" hinter jeder suspendierten
+                                 Zeile der Tabelle - Status 'Suspended'
+                                 (-SuspendWhenReadyToComplete) UND 'AutoSuspended'
+                                 (automatisches Anhalten). Er fortsetzt genau DIESE
+                                 Anforderung per Resume-MoveRequest, nicht den ganzen
+                                 Batch. Der Button verschwindet automatisch, sobald der
+                                 Status sich geaendert hat.
+                           - v2.4 Neu: /api/move-aktion akzeptiert Identity einer
+                                 einzelnen Anforderung (neben BatchName und Alle).
+                                 Die Identity kommt aus der Detailzeile - dadurch ist
+                                 sichergestellt, dass genau der angezeigte Job
+                                 fortgesetzt wird.
+                           - v2.4 Neu: Der Auftrag einer Einzel-Aktion traegt keine
+                                 Batch-Kennung mehr - ein Batch-Button am Auftrag
+                                 wuerde sonst faelschlich den ganzen Batch fortsetzen.
 
     BEI ENVELOPE-FEHLERN (Get-MoveRequestStatistics):
         In einer Exchange Management Shell ausführen und Skript neu starten:
@@ -760,6 +775,9 @@ function New-FehlgeschlageneZeile {
     return @{
         DisplayName          = Get-Text $MoveRequest.DisplayName
         Alias                = Get-Text ($MoveRequest.DisplayName -replace '@.*', '')
+        # Identity erlaubt spaeter pro Zeile eine einzelne Anforderung
+        # anzusprechen (Button "Abschließen" bei suspendierten Jobs).
+        Identity             = Get-Text $MoveRequest.Identity
         Status               = $StatusString
         StatusDetail         = "Statistik nicht abrufbar"
         StatusFarbe          = (Get-StatusFarbe -Status $StatusString)
@@ -824,6 +842,7 @@ function New-Grundzeile {
     return @{
         DisplayName          = Get-Text $MoveRequest.DisplayName
         Alias                = Get-Text ($MoveRequest.DisplayName -replace '@.*', '')
+        Identity             = Get-Text $MoveRequest.Identity
         Status               = $StatusString
         StatusDetail         = "..."
         StatusFarbe          = (Get-StatusFarbe -Status $StatusString)
@@ -1560,19 +1579,24 @@ function Start-MoveAktion {
                     die Postfaecher bleiben unberuehrt (Exchange raegt sie
                     nach 24 h ohnehin selbst auf).
 
-        Ausgewaehlt wird entweder ein einzelner Batch (BatchName) oder alles
-        (Alle). Wie bei der Verschiebung laeuft die Arbeit in einem eigenen
-        Hintergrund-Job: die Anfrage antwortet sofort und der Fortschritt
-        kommt ueber /api/move-status. Ein Resume ueber hunderte Anforderungen
+        Ausgewaehlt wird entweder eine einzelne Anforderung (Identity),
+        ein ganzer Batch (BatchName) oder alles (Alle). Wie bei der
+        Verschiebung laeuft die Arbeit in einem eigenen Hintergrund-Job:
+        die Anfrage antwortet sofort und der Fortschritt kommt ueber
+        /api/move-status. Ein Resume ueber hunderte Anforderungen
         wuerde sonst die komplette Request-Schleife anhalten.
 
     .PARAMETER Aktion
         'Resume' (suspendierte fortssetzen) oder 'Entfernen'
         (abgeschlossene entfernen).
     .PARAMETER BatchName
-        Einschraenkung auf einen Batch. Leer ist nur zusammen mit -Alle zulaessig.
+        Einschraenkung auf einen Batch. Leer ist nur zusammen mit -Alle
+        oder -Identity zulaessig.
     .PARAMETER Alle
         $true = alle passenden Anforderungen, unabhaengig vom Batch.
+    .PARAMETER Identity
+        Identity EINER Anforderung (die Tabelle liefert sie pro Zeile).
+        Leer, wenn ueber Batch oder Alle gearbeitet wird.
     .OUTPUTS
         Hashtable. Entweder 'Fehler' (Validierung/Abfrage fehlgeschlagen) oder
         'AuftragId' plus 'Meldung'.
@@ -1587,11 +1611,17 @@ function Start-MoveAktion {
         [string]$BatchName = "",
 
         [Parameter(Mandatory = $false)]
-        [bool]$Alle = $false
+        [bool]$Alle = $false,
+
+        [Parameter(Mandatory = $false)]
+        [AllowEmptyString()]
+        [string]$Identity = ""
     )
 
-    if (-not $Alle -and [string]::IsNullOrWhiteSpace($BatchName)) {
-        return @{ Fehler = "Es wurde weder ein Batch noch 'alle' angegeben." }
+    $Einzelziel = -not [string]::IsNullOrWhiteSpace($Identity)
+
+    if (-not $Alle -and -not $Einzelziel -and [string]::IsNullOrWhiteSpace($BatchName)) {
+        return @{ Fehler = "Es wurde weder eine Anforderung noch ein Batch noch 'alle' angegeben." }
     }
 
     # Der Zielbefehl muss existieren, sonst liefert der Job nur Fehlerzeilen.
@@ -1606,7 +1636,10 @@ function Start-MoveAktion {
 
     # --- passende Anforderungen suchen -------------------------------------
     try {
-        if ($Alle) {
+        if ($Einzelziel) {
+            $AlleAnforderungen = @(Get-MoveRequest -Identity $Identity -ErrorAction Stop)
+        }
+        elseif ($Alle) {
             $AlleAnforderungen = @(Get-MoveRequest -ResultSize Unlimited -ErrorAction Stop)
         }
         else {
@@ -1627,6 +1660,9 @@ function Start-MoveAktion {
     if ($Passende.Count -eq 0) {
         $Wort = 'abgeschlossene'
         if ($Aktion -eq 'Resume') { $Wort = 'suspendierte' }
+        if ($Einzelziel) {
+            return @{ Fehler = "Die Anforderung '$Identity' ist keine $Wort Anforderung (mehr)." }
+        }
         if ($Alle) {
             return @{ Fehler = "Keine $Wort MoveRequests gefunden." }
         }
@@ -1707,6 +1743,19 @@ function Start-MoveAktion {
     if ($Alle) { $BatchAnzeige = "" }
     $AuswahlText = "Batch '$BatchName'"
     if ($Alle) { $AuswahlText = "alle Anforderungen" }
+
+    # Einzelziel: im Auftrag keine Batch-Kennung zeigen - der Name der
+    # Anforderung steht ohnehin in der Meldung, und ein Batch-Button am
+    # Auftrag wuerde hier fälschlich den ganzen Batch fortsetzen.
+    if ($Einzelziel) {
+        $BatchAnzeige = ""
+        $EinzelName = $Identity
+        if ($Passende.Count -eq 1) {
+            $EinzelName = [string]$Passende[0].DisplayName
+            if ([string]::IsNullOrWhiteSpace($EinzelName)) { $EinzelName = [string]$Passende[0].Identity }
+        }
+        $AuswahlText = "'$EinzelName'"
+    }
 
     $script:VersandAuftraege[[string]$AuftragId] = [pscustomobject]@{
         Id            = $AuftragId
@@ -2167,6 +2216,9 @@ function Get-MoveRequestDaten {
             $Zeile = @{
                 DisplayName          = Get-Text $Stats.DisplayName
                 Alias                = Get-Text $Stats.Alias
+                # Identity aus dem MoveRequest (nicht aus der Statistik) -
+                # sie ist der sichere Angriffspunkt fuer Resume-MoveRequest.
+                Identity             = Get-Text $MoveRequest.Identity
                 Status               = $StatusString
                 StatusDetail         = Get-DetailText $Stats.StatusDetail
                 StatusFarbe          = (Get-StatusFarbe -Status $StatusString)
@@ -3280,10 +3332,30 @@ function Get-DashboardHTML {
                         '</div>';
                 }
 
+                // Statuszelle: Badge und - bei suspendierten Anforderungen -
+                // dahinter der Button, der GENAU diese Anforderung
+                // abschliesst (v2.4). Zutreffend sind 'Suspended'
+                // (-SuspendWhenReadyToComplete) und 'AutoSuspended'
+                // (automatisches Anhalten). Der Button verschwindet
+                // automatisch, sobald der Status sich geaendert hat.
+                const suspendiert = /Suspend/i.test(String(d.Status || ''));
+                let statusZelle =
+                    '<span class="status-badge" style="background-color:' + escapeHtml(d.StatusFarbe) + ';">' +
+                        escapeHtml(d.Status) + '</span>';
+
+                if (suspendiert && d.Identity) {
+                    statusZelle +=
+                        ' <button type="button" class="mini-schalter auftrag-knopf" ' +
+                            'data-identity="' + escapeHtml(d.Identity) + '" ' +
+                            'data-name="' + escapeHtml(d.DisplayName) + '" ' +
+                            'title="Diese Verschiebeanforderung abschließen (Resume-MoveRequest)" ' +
+                            'onclick="anforderungAbschliessen(this.dataset.identity, this.dataset.name)">' +
+                            '&#8635; Abschließen</button>';
+                }
+
                 tr.innerHTML =
                     '<td>' + nameZelle + '</td>' +
-                    '<td><span class="status-badge" style="background-color:' + escapeHtml(d.StatusFarbe) + ';">' +
-                        escapeHtml(d.Status) + '</span></td>' +
+                    '<td>' + statusZelle + '</td>' +
                     '<td>' + escapeHtml(d.StatusDetail) + '</td>' +
                     '<td>' + fortschrittZelle + '</td>' +
                     '<td>' + escapeHtml(d.BytesUebertragen) + '</td>' +
@@ -3706,8 +3778,11 @@ function Get-DashboardHTML {
          * Laeuft ueber dieselbe Kette wie die Verschiebung selbst:
          * der Server antwortet sofort mit einer Auftrag-Id, der Fortschritt
          * kommt danach ueber /api/move-status.
+         *
+         * Zielwahl (v2.4): batchName + alle fuer Batch bzw. alles,
+         * identity fuer EINE einzelne Anforderung aus der Tabelle.
          */
-        async function moveAktionStarten(aktion, batchName, alle, frage) {
+        async function moveAktionStarten(aktion, batchName, alle, frage, identity) {
             if (versandLaueuft) {
                 zeigeVersandMeldung('Es läuft bereits ein Vorgang - bitte kurz warten.', true);
                 return;
@@ -3729,7 +3804,8 @@ function Get-DashboardHTML {
                     body: JSON.stringify({
                         Aktion:    aktion,
                         BatchName: batchName || '',
-                        Alle:      !!alle
+                        Alle:      !!alle,
+                        Identity:  identity || ''
                     })
                 });
 
@@ -3760,6 +3836,20 @@ function Get-DashboardHTML {
             moveAktionStarten('Resume', batch, false,
                 'Suspendierte Anforderungen im Batch "' + batch + '" fortsetzen?\n\n' +
                 'Resume-MoveRequest: die Verschiebung läuft danach bis zum Abschluss weiter.');
+        }
+
+        /**
+         * EINE suspendierte Anforderung aus der Tabelle abschliessen (v2.4).
+         * Der Button steht hinter jeder Zeile mit *Suspend*-Status - also
+         * auch hinter auto-suspendierten Anforderungen. Es wird genau die
+         * eine Identity weitergeschickt, nicht der ganze Batch.
+         */
+        function anforderungAbschliessen(identity, name) {
+            moveAktionStarten('Resume', '', false,
+                'Verschiebeanforderung von "' + name + '" abschließen?\n\n' +
+                'Resume-MoveRequest für genau diese Anforderung:\n' +
+                'die Verschiebung läuft danach bis zum Abschluss weiter.',
+                identity);
         }
 
         /** ALLE suspendierten Anforderungen fortsetzen. */
@@ -4231,10 +4321,12 @@ try {
                         $Aktion = ""
                         $Batch  = ""
                         $Alle   = $false
+                        $Ident  = ""
 
                         if ($Nutzen.PSObject.Properties['Aktion'])    { $Aktion = [string]$Nutzen.Aktion }
                         if ($Nutzen.PSObject.Properties['BatchName']) { $Batch  = [string]$Nutzen.BatchName }
                         if ($Nutzen.PSObject.Properties['Alle'])      { $Alle   = [bool]$Nutzen.Alle }
+                        if ($Nutzen.PSObject.Properties['Identity'])  { $Ident  = [string]$Nutzen.Identity }
 
                         if ([string]::IsNullOrWhiteSpace($Aktion)) {
                             throw "Keine Aktion angegeben (Resume oder Entfernen)."
@@ -4242,7 +4334,8 @@ try {
 
                         $Rueckgabe = Start-MoveAktion -Aktion $Aktion `
                                                       -BatchName $Batch `
-                                                      -Alle $Alle |
+                                                      -Alle $Alle `
+                                                      -Identity $Ident |
                                      Select-Object -Last 1
 
                         # Nur eine Hashtable wird akzeptiert - so bleibt die
