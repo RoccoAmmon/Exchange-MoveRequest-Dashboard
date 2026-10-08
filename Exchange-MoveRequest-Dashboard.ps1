@@ -52,15 +52,16 @@
       /api/move-status -> Status und Ergebnis der gestarteten Verschiebeauftraege
       /api/move-aktion -> Fortsetzen suspendierter oder Loeschen
                  abgeschlossener MoveRequests (POST, JSON-Body mit Aktion,
-                 BatchName, Alle und optional Identity EINER Anforderung)
+                 BatchName, Alle und optional Identity bzw. Identities
+                 einer oder mehrerer Anforderungen)
       /api/stop        -> Stoppt den Webserver sauber
 
 .NOTES
     Autor:          Rocco Ammon
     Erstelldatum:   26.02.2026
     Stand:          08.10.2026
-    Version:        2.6 (Andere Instanz auf demselben Port wird beim Start
-                            automatisch beendet - Fehler 32 vorab)
+    Version:        2.7 (Mehrfachauswahl suspendierter Anforderungen -
+                            auswählen und mit einem Klick abschließen)
     Voraussetzung:  Exchange Server 2019 On-Premises
     Log-Pfad:       C:\ExchangeMigrationLog
     HINWEIS:        Muss als Administrator ausgeführt werden (HttpListener benötigt dies)
@@ -221,6 +222,18 @@
  allein reicht nicht: eine in einer offenen
  gestartete Instanz traegt den Skriptnamen nicht in
  Kommandozeile.
+                           - v2.7 Neu: Mehrfachauswahl suspendierter Anforderungen.
+ Zeile mit *Suspend*-Status hat jetzt ein Auswahlfeld neben dem
+-Button. Darueber erscheint eine Leiste mit "Alle sichtbaren
+", "Auswahl abschliessen" (mit Zaehler) und "Auswahl
+". Die Auswahl ueberlebt den Tabelle-Render (der bei jedem
+ komplett neu gebaut wird) und wird aufgeraeumt, sobald eine
+ nicht mehr suspendiert ist.
+                           - v2.7 Neu: /api/move-aktion akzeptiert Identities als Array. Daraus
+ EIN Hintergrund-Auftrag, der die Auswahl der Reihe nach
+ - ein Fortschrittsbalken statt eines Requests pro Zeile.
+ auffindbare Identities werden protokolliert und uebersprungen,
+ Rest laeuft trotzdem.
 
     BEI ENVELOPE-FEHLERN (Get-MoveRequestStatistics):
         In einer Exchange Management Shell ausführen und Skript neu starten:
@@ -1847,7 +1860,8 @@ function Start-MoveAktion {
                     die Postfaecher bleiben unberuehrt (Exchange raegt sie
                     nach 24 h ohnehin selbst auf).
 
-        Ausgewaehlt wird entweder eine einzelne Anforderung (Identity),
+        Ausgewaehlt wird entweder eine Anforderung (Identity - eine oder
+        mehrere, die Mehrfachauswahl der GUI schickt alle auf einmal),
         ein ganzer Batch (BatchName) oder alles (Alle). Wie bei der
         Verschiebung laeuft die Arbeit in einem eigenen Hintergrund-Job:
         die Anfrage antwortet sofort und der Fortschritt kommt ueber
@@ -1863,8 +1877,11 @@ function Start-MoveAktion {
     .PARAMETER Alle
         $true = alle passenden Anforderungen, unabhaengig vom Batch.
     .PARAMETER Identity
-        Identity EINER Anforderung (die Tabelle liefert sie pro Zeile).
-        Leer, wenn ueber Batch oder Alle gearbeitet wird.
+        Identity EINER Anforderung (die Tabelle liefert sie pro Zeile)
+        oder ein Array von Identities aus der Mehrfachauswahl. Leer,
+        wenn ueber Batch oder Alle gearbeitet wird. Identities, die nicht
+        aufgeloest werden koennen, werden protokolliert und uebersprungen -
+        der Rest der Auswahl laeuft trotzdem.
     .OUTPUTS
         Hashtable. Entweder 'Fehler' (Validierung/Abfrage fehlgeschlagen) oder
         'AuftragId' plus 'Meldung'.
@@ -1883,10 +1900,16 @@ function Start-MoveAktion {
 
         [Parameter(Mandatory = $false)]
         [AllowEmptyString()]
-        [string]$Identity = ""
+        [AllowEmptyCollection()]
+        [string[]]$Identity = @()
     )
 
-    $Einzelziel = -not [string]::IsNullOrWhiteSpace($Identity)
+    # Identity kann EINE Anforderung (Einzel-Button) oder MEHRERE enthalten
+    # (Mehrfachauswahl in der GUI). Leere Eintraege und Dubletten fallen raus.
+    $ZielIds = @($Identity |
+        Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } |
+        Select-Object -Unique)
+    $Einzelziel = $ZielIds.Count -gt 0
 
     if (-not $Alle -and -not $Einzelziel -and [string]::IsNullOrWhiteSpace($BatchName)) {
         return @{ Fehler = "Es wurde weder eine Anforderung noch ein Batch noch 'alle' angegeben." }
@@ -1905,7 +1928,28 @@ function Start-MoveAktion {
     # --- passende Anforderungen suchen -------------------------------------
     try {
         if ($Einzelziel) {
-            $AlleAnforderungen = @(Get-MoveRequest -Identity $Identity -ErrorAction Stop)
+            # Jede Identity einzeln auflösen: eine Mehrfachauswahl darf nicht
+            # an einer unbekannten Adresse hängenbleiben. Identities, die
+            # nicht mehr existieren (z.B. zwischenzeitlich abgeschlossene),
+            # werden protokolliert und übersprungen.
+            $Gefunden    = @()
+            $OhneTreffer = @()
+
+            foreach ($EineIdentity in $ZielIds) {
+                try {
+                    $Gefunden += @(Get-MoveRequest -Identity $EineIdentity -ErrorAction Stop)
+                }
+                catch {
+                    $OhneTreffer += $EineIdentity
+                }
+            }
+
+            if ($OhneTreffer.Count -gt 0) {
+                $Nennung = ($OhneTreffer | Select-Object -First 5) -join "', '"
+                Write-Log -Nachricht "MoveRequest-Aktion: $($OhneTreffer.Count) von $($ZielIds.Count) ausgewählten Anforderungen nicht gefunden: '$Nennung'." -Typ "WARNUNG"
+            }
+
+            $AlleAnforderungen = $Gefunden
         }
         elseif ($Alle) {
             $AlleAnforderungen = @(Get-MoveRequest -ResultSize Unlimited -ErrorAction Stop)
@@ -1929,7 +1973,10 @@ function Start-MoveAktion {
         $Wort = 'abgeschlossene'
         if ($Aktion -eq 'Resume') { $Wort = 'suspendierte' }
         if ($Einzelziel) {
-            return @{ Fehler = "Die Anforderung '$Identity' ist keine $Wort Anforderung (mehr)." }
+            if ($ZielIds.Count -eq 1) {
+                return @{ Fehler = "Die Anforderung '$($ZielIds[0])' ist keine $Wort Anforderung (mehr)." }
+            }
+            return @{ Fehler = "Keine der $($ZielIds.Count) ausgewählten Anforderungen ist (mehr) eine $Wort Anforderung." }
         }
         if ($Alle) {
             return @{ Fehler = "Keine $Wort MoveRequests gefunden." }
@@ -2017,12 +2064,21 @@ function Start-MoveAktion {
     # Auftrag wuerde hier fälschlich den ganzen Batch fortsetzen.
     if ($Einzelziel) {
         $BatchAnzeige = ""
-        $EinzelName = $Identity
-        if ($Passende.Count -eq 1) {
+
+        if ($ZielIds.Count -eq 1) {
+            # Eine Anforderung: den Namen zeigen, nicht die Identity - so
+            # steht in der Meldung, was der Benutzer in der Zeile anklickte.
             $EinzelName = [string]$Passende[0].DisplayName
             if ([string]::IsNullOrWhiteSpace($EinzelName)) { $EinzelName = [string]$Passende[0].Identity }
+            $AuswahlText = "'$EinzelName'"
         }
-        $AuswahlText = "'$EinzelName'"
+        else {
+            # Mehrfachauswahl: der Batch-Button am Auftrag wuerde hier
+            # faelschlich den ganzen Batch fortsetzen - deshalb keine
+            # Batch-Kennung, und "Mehrfachauswahl" statt einer Zahl: $AnzahlText
+            # sagt ohnehin, wie viele Anforderungen wirklich dran sind.
+            $AuswahlText = "Mehrfachauswahl"
+        }
     }
 
     $script:VersandAuftraege[[string]$AuftragId] = [pscustomobject]@{
@@ -2891,6 +2947,44 @@ function Get-DashboardHTML {
         }
         .suchfeld:focus { border-color: #0078d4; }
 
+        /* ============ Mehrfachauswahl suspendierter Anforderungen (v2.7) ============ */
+        .auswahl-leiste {
+            display: none;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 12px;
+            padding: 0 25px 6px 25px;
+            font-size: 13px;
+            color: #555;
+        }
+        .auswahl-leiste label {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            cursor: pointer;
+            user-select: none;
+        }
+        .auswahl-leiste input[type="checkbox"] {
+            width: 15px;
+            height: 15px;
+            cursor: pointer;
+            accent-color: #0078d4;
+        }
+        /* Kaestchen in der Statuszelle der Tabelle */
+        .zeilen-auswahl {
+            display: inline-flex;
+            align-items: center;
+            margin-right: 5px;
+            vertical-align: middle;
+            cursor: pointer;
+        }
+        .zeilen-auswahl input {
+            width: 15px;
+            height: 15px;
+            cursor: pointer;
+            accent-color: #0078d4;
+        }
+
         /* ============ Verschiebeanforderung (v2.2) ============ */
         .versand-container {
             background: white;
@@ -3220,6 +3314,23 @@ function Get-DashboardHTML {
             <input type="text" class="suchfeld" id="suchfeld"
                    placeholder="&#128269; Suche nach Name, Status, Datenbank, Batch...">
         </div>
+        <!-- Mehrfachauswahl: suspendierte Anforderungen anklicken und in
+             einem Schritt abschliessen (v2.7). Erscheint nur, wenn es
+             ueberhaupt auswaehlbare Zeilen gibt. -->
+        <div class="auswahl-leiste" id="moveAuswahlLeiste">
+            <label title="Alle sichtbaren suspendierten Anforderungen auswählen (respektiert die Suche)">
+                <input type="checkbox" id="moveAlleAuswahl" onchange="moveAlleAuswahlGeaendert(this)">
+                Alle sichtbaren auswählen
+            </label>
+            <button type="button" class="mini-schalter" id="moveAuswahlSchalter"
+                    onclick="moveAuswahlAbschliessen()" disabled
+                    title="Die ausgewählten Verschiebeanforderungen mit Resume-MoveRequest abschließen">
+                &#8635; Auswahl abschließen
+            </button>
+            <button type="button" class="mini-schalter" id="moveAuswahlAufhebenSchalter"
+                    onclick="moveAuswahlAufheben()" disabled>Auswahl aufheben</button>
+            <span class="versand-hinweis-text" id="moveAuswahlZahl">0 ausgewählt</span>
+        </div>
         <div class="tabellen-scroll">
             <table>
                 <thead>
@@ -3498,6 +3609,15 @@ function Get-DashboardHTML {
         // ================================================================
         // NEU: Detail-Tabelle mit Prioritätssortierung + Trennlinie
         // ================================================================
+        // ================================================================
+        // Mehrfachauswahl suspendierter Anforderungen (v2.7)
+        // ================================================================
+        // Die Tabelle wird bei JEDEM Poll komplett neu gebaut - die Auswahl
+        // muss den Render ueberleben. Deshalb ein Set der Identities und
+        // separat die Anzeigenamen fuer die Bestaetigungs-Abfrage.
+        const moveAuswahl      = new Set();
+        const moveAuswahlNamen = new Map();
+
         function tabelleAktualisieren(details) {
             const tbody = document.getElementById('tabellenBody');
             tbody.innerHTML = '';
@@ -3507,6 +3627,9 @@ function Get-DashboardHTML {
                     'Keine MoveRequests vorhanden.</td></tr>';
                 // Sortierhinweis ausblenden
                 document.getElementById('sortierHinweis').style.display = 'none';
+                // Auswaehlbare Zeilen gibt es keine mehr -> Auswahl leeren
+                moveAuswahlPrunen([]);
+                moveAuswahlAktualisieren();
                 return;
             }
 
@@ -3612,6 +3735,17 @@ function Get-DashboardHTML {
                         escapeHtml(d.Status) + '</span>';
 
                 if (suspendiert && d.Identity) {
+                    // Kaestchen fuer die Mehrfachauswahl (v2.7): links vom
+                    // Badge, der Einzel-Button bleibt daneben stehen.
+                    statusZelle =
+                        '<label class="zeilen-auswahl" title="Auswählen, um mehrere ' +
+                                'Verschiebeanforderungen gemeinsam abzuschließen">' +
+                            '<input type="checkbox" data-identity="' + escapeHtml(d.Identity) + '"' +
+                                ' data-name="' + escapeHtml(d.DisplayName) + '"' +
+                                (moveAuswahl.has(d.Identity) ? ' checked' : '') +
+                                ' onchange="moveAuswahlKastenGeaendert(this)">' +
+                        '</label>' + statusZelle;
+
                     statusZelle +=
                         ' <button type="button" class="mini-schalter auftrag-knopf" ' +
                             'data-identity="' + escapeHtml(d.Identity) + '" ' +
@@ -3641,6 +3775,11 @@ function Get-DashboardHTML {
 
             // Suchfilter erneut anwenden
             suchfilterAnwenden();
+
+            // Auswahl nachziehen: Identities, die nicht mehr (suspendiert)
+            // in der Tabelle stehen, rauswerfen und die Leiste aktualisieren.
+            moveAuswahlPrunen(details);
+            moveAuswahlAktualisieren();
         }
 
         // ================================================================
@@ -3696,7 +3835,12 @@ function Get-DashboardHTML {
             }
         }
 
-        document.getElementById('suchfeld').addEventListener('input', suchfilterAnwenden);
+        // Nach einer Suche neu bewerten, ob "Alle sichtbaren" gesetzt sein
+        // muss (die Sichtbarkeit aendert sich, die Auswahl selbst nicht).
+        document.getElementById('suchfeld').addEventListener('input', function() {
+            suchfilterAnwenden();
+            moveAuswahlAktualisieren();
+        });
 
         // ================================================================
         // Verschiebeanforderung starten (v2.2)
@@ -4049,16 +4193,29 @@ function Get-DashboardHTML {
          *
          * Zielwahl (v2.4): batchName + alle fuer Batch bzw. alles,
          * identity fuer EINE einzelne Anforderung aus der Tabelle.
+         * Mehrfachauswahl (v2.7): identities als Array - daraus baut der
+         * Server EINEN Auftrag, der die Anforderungen der Reihe nach
+         * fortsetzt (ein Fortschrittsbalken statt N Requests).
+         *
+         * Gibt die Server-Antwort zurueck (bzw. null bei Fehler oder
+         * abgebrochener Bestaetigung).
          */
-        async function moveAktionStarten(aktion, batchName, alle, frage, identity) {
+        async function moveAktionStarten(aktion, batchName, alle, frage, identities) {
             if (versandLaueuft) {
                 zeigeVersandMeldung('Es läuft bereits ein Vorgang - bitte kurz warten.', true);
-                return;
+                return null;
             }
-            if (!confirm(frage)) return;
+            if (!confirm(frage)) return null;
+
+            // Einzel-Identity (v2.4) und Mehrfachauswahl (v2.7) laufen
+            // ueber denselben Aufruf.
+            const ziele = Array.isArray(identities)
+                ? identities
+                : (identities ? [identities] : []);
 
             versandLaueuft = true;
-            const knoepfe = ['alleResumeSchalter', 'alleLoeschenSchalter'];
+            const knoepfe = ['alleResumeSchalter', 'alleLoeschenSchalter',
+                             'moveAuswahlSchalter', 'moveAuswahlAufhebenSchalter'];
             knoepfe.forEach(function(id) {
                 const k = document.getElementById(id);
                 if (k) k.disabled = true;
@@ -4070,10 +4227,11 @@ function Get-DashboardHTML {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        Aktion:    aktion,
-                        BatchName: batchName || '',
-                        Alle:      !!alle,
-                        Identity:  identity || ''
+                        Aktion:     aktion,
+                        BatchName:  batchName || '',
+                        Alle:       !!alle,
+                        Identity:   ziele.length === 1 ? ziele[0] : '',
+                        Identities: ziele
                     })
                 });
 
@@ -4081,21 +4239,31 @@ function Get-DashboardHTML {
 
                 if (!response.ok || daten.Fehler) {
                     zeigeVersandMeldung('Fehler: ' + escapeHtml(daten.Fehler || ('HTTP ' + response.status)), true);
-                    return;
+                    return null;
                 }
 
                 zeigeVersandMeldung(
                     '<strong>Auftrag #' + escapeHtml(daten.AuftragId) + ' gestartet.</strong><br>' +
                     escapeHtml(daten.Meldung), false);
                 statusAbfragenStarten();
+
+                // Der Auftrag laeuft - die Auswahl ist verbraucht. Bei
+                // Fehlern bleibt sie stehen, damit erneut gestartet werden
+                // kann.
+                if (ziele.length > 0) moveAuswahlAufheben();
+
+                return daten;
             } catch (fehler) {
                 zeigeVersandMeldung('Fehler: ' + escapeHtml(fehler.message), true);
+                return null;
             } finally {
                 versandLaueuft = false;
                 knoepfe.forEach(function(id) {
                     const k = document.getElementById(id);
                     if (k) k.disabled = false;
                 });
+                // Zustand neu bewerten: bei 0 ausgewaehlt wieder gesperrt.
+                moveAuswahlAktualisieren();
             }
         }
 
@@ -4125,6 +4293,145 @@ function Get-DashboardHTML {
             moveAktionStarten('Resume', '', true,
                 'Alle suspendierten MoveRequests fortsetzen?\n\n' +
                 'Resume-MoveRequest für jede suspendierte Anforderung (alle Batches).');
+        }
+
+        // ================================================================
+        // Mehrfachauswahl suspendierter Anforderungen (v2.7)
+        // ================================================================
+
+        /**
+         * Ein Kaestchen in der Tabelle umschalten.
+         */
+        function moveAuswahlKastenGeaendert(kasten) {
+            const id = kasten.dataset.identity;
+            if (kasten.checked) {
+                moveAuswahl.add(id);
+                moveAuswahlNamen.set(id, kasten.dataset.name || id);
+            } else {
+                moveAuswahl.delete(id);
+                moveAuswahlNamen.delete(id);
+            }
+            moveAuswahlAktualisieren();
+        }
+
+        /**
+         * "Alle sichtbaren auswaehlen" - nur Zeilen, die der Suchfilter
+         * gerade zeigt. Beim Abwaehlen wird die gesamte Auswahl geleert,
+         * auch die hinter der Suche versteckten Treffer (anders wuerde der
+         * Zaehler weiterlaufen, waehrend nichts mehr sichtbar ist).
+         */
+        function moveAlleAuswahlGeaendert(kasten) {
+            const kisten = document.querySelectorAll('#tabellenBody input[data-identity]');
+
+            if (kasten.checked) {
+                kisten.forEach(function(k) {
+                    if (k.closest('tr').style.display === 'none') return;
+                    moveAuswahl.add(k.dataset.identity);
+                    moveAuswahlNamen.set(k.dataset.identity, k.dataset.name || k.dataset.identity);
+                });
+            } else {
+                moveAuswahl.clear();
+                moveAuswahlNamen.clear();
+            }
+
+            // Der Suchfilter kann nach dem Setzen geaendert haben, welche
+            // Zeile sichtbar ist - die Kaestchen folgen der Auswahl, nicht
+            // umgekehrt.
+            kisten.forEach(function(k) { k.checked = moveAuswahl.has(k.dataset.identity); });
+            moveAuswahlAktualisieren();
+        }
+
+        /** Ausgewaehlte Kaestchen leeren. */
+        function moveAuswahlAufheben() {
+            moveAuswahl.clear();
+            moveAuswahlNamen.clear();
+
+            document.querySelectorAll('#tabellenBody input[data-identity]').forEach(function(k) {
+                k.checked = false;
+            });
+            const alle = document.getElementById('moveAlleAuswahl');
+            if (alle) alle.checked = false;
+
+            moveAuswahlAktualisieren();
+        }
+
+        /**
+         * ALLE ausgewaehlten Anforderungen in EINEM Schritt abschliessen.
+         * Ein einziger /api/move-aktion-Aufruf mit allen Identities - der
+         * Server faedelt daraus genau einen Hintergrund-Auftrag mit
+         * Fortschrittsanzeige, statt N Requests zu schicken.
+         */
+        function moveAuswahlAbschliessen() {
+            const ids = Array.from(moveAuswahl);
+            if (ids.length === 0) return;
+
+            const namen = ids.map(function(id) { return moveAuswahlNamen.get(id) || id; });
+            const liste = namen.slice(0, 10).map(function(n) { return '  • ' + n; }).join('\n');
+            const rest  = namen.length > 10 ? '\n  … und ' + (namen.length - 10) + ' weitere' : '';
+
+            const frage =
+                (namen.length === 1
+                    ? '1 ausgewählte Verschiebeanforderung abschließen?'
+                    : namen.length + ' ausgewählte Verschiebeanforderungen abschließen?') +
+                '\n\nResume-MoveRequest für:\n' + liste + rest +
+                '\n\nDie Verschiebungen laufen danach bis zum Abschluss weiter.';
+
+            moveAktionStarten('Resume', '', false, frage, ids);
+        }
+
+        /**
+         * Auswahl aufraeumen: alles, was inzwischen nicht mehr (suspendiert)
+         * in der Tabelle steht, fliegt raus - sonst bliebe ein Geisterhaufen
+         * ausgewaehlt, den niemand mehr sieht. Die Namen werden hier neu
+         * aufgebaut, damit sie immer zum aktuellen Stand passen.
+         */
+        function moveAuswahlPrunen(details) {
+            const jetzt = new Map();
+            (details || []).forEach(function(d) {
+                if (d.Identity && /Suspend/i.test(String(d.Status || ''))) {
+                    jetzt.set(d.Identity, d.DisplayName || d.Identity);
+                }
+            });
+
+            moveAuswahl.forEach(function(id) {
+                if (!jetzt.has(id)) moveAuswahl.delete(id);
+            });
+
+            moveAuswahlNamen.clear();
+            moveAuswahl.forEach(function(id) { moveAuswahlNamen.set(id, jetzt.get(id)); });
+        }
+
+        /**
+         * Leiste, Zaehler und Schalter neu bewerten.
+         */
+        function moveAuswahlAktualisieren() {
+            const leiste   = document.getElementById('moveAuswahlLeiste');
+            const schalter = document.getElementById('moveAuswahlSchalter');
+            const aufheben = document.getElementById('moveAuswahlAufhebenSchalter');
+            const zahl     = document.getElementById('moveAuswahlZahl');
+            const alleKast = document.getElementById('moveAlleAuswahl');
+            const kisten   = document.querySelectorAll('#tabellenBody input[data-identity]');
+
+            if (!leiste || !schalter || !aufheben || !zahl || !alleKast) return;
+
+            // Ohne auswaehlbare Zeilen ist die Leiste nur Googeld.
+            leiste.style.display = kisten.length > 0 ? 'flex' : 'none';
+
+            const anzahl = moveAuswahl.size;
+            schalter.disabled = (anzahl === 0) || versandLaueuft;
+            aufheben.disabled = (anzahl === 0) || versandLaueuft;
+            zahl.textContent   = anzahl + ' ausgewählt';
+
+            // "Alle sichtbaren" nur haekchen, wenn tatsaechlich alle
+            // sichtbaren ausgewaehlt sind.
+            let sichtbar     = 0;
+            let sichtbarDrin = 0;
+            kisten.forEach(function(k) {
+                if (k.closest('tr').style.display === 'none') return;
+                sichtbar++;
+                if (moveAuswahl.has(k.dataset.identity)) sichtbarDrin++;
+            });
+            alleKast.checked = (sichtbar > 0 && sichtbarDrin === sichtbar);
         }
 
         /** Abgeschlossene Anforderungen EINES Batches entfernen. */
@@ -4685,12 +4992,27 @@ try {
                         $Aktion = ""
                         $Batch  = ""
                         $Alle   = $false
-                        $Ident  = ""
 
                         if ($Nutzen.PSObject.Properties['Aktion'])    { $Aktion = [string]$Nutzen.Aktion }
                         if ($Nutzen.PSObject.Properties['BatchName']) { $Batch  = [string]$Nutzen.BatchName }
                         if ($Nutzen.PSObject.Properties['Alle'])      { $Alle   = [bool]$Nutzen.Alle }
-                        if ($Nutzen.PSObject.Properties['Identity'])  { $Ident  = [string]$Nutzen.Identity }
+
+                        # Zielwahl: Identities (Array) aus der Mehrfachauswahl
+                        # hat Vorrang, sonst die einzelne Identity (v2.4).
+                        $IdentListe = @()
+
+                        if ($Nutzen.PSObject.Properties['Identities']) {
+                            $IdentListe = @($Nutzen.Identities |
+                                ForEach-Object { [string]$_ } |
+                                Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+                        }
+
+                        if ($IdentListe.Count -eq 0 -and $Nutzen.PSObject.Properties['Identity']) {
+                            $Einzeln = [string]$Nutzen.Identity
+                            if (-not [string]::IsNullOrWhiteSpace($Einzeln)) {
+                                $IdentListe = @($Einzeln)
+                            }
+                        }
 
                         if ([string]::IsNullOrWhiteSpace($Aktion)) {
                             throw "Keine Aktion angegeben (Resume oder Entfernen)."
@@ -4699,7 +5021,7 @@ try {
                         $Rueckgabe = Start-MoveAktion -Aktion $Aktion `
                                                       -BatchName $Batch `
                                                       -Alle $Alle `
-                                                      -Identity $Ident |
+                                                      -Identity $IdentListe |
                                      Select-Object -Last 1
 
                         # Nur eine Hashtable wird akzeptiert - so bleibt die
