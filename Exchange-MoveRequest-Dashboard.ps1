@@ -59,8 +59,8 @@
     Autor:          Rocco Ammon
     Erstelldatum:   26.02.2026
     Stand:          08.10.2026
-    Version:        2.4 (Button "Abschließen" pro suspendierter Anforderung,
-                            Einzelziel via Identity in /api/move-aktion)
+    Version:        2.5 (Diagnose beim Start: zweite Instanz, Port-Listener
+                            und URL-Reservierungen im Fehlerfall protokolliert)
     Voraussetzung:  Exchange Server 2019 On-Premises
     Log-Pfad:       C:\ExchangeMigrationLog
     HINWEIS:        Muss als Administrator ausgeführt werden (HttpListener benötigt dies)
@@ -196,6 +196,19 @@
                            - v2.4 Neu: Der Auftrag einer Einzel-Aktion traegt keine
                                  Batch-Kennung mehr - ein Batch-Button am Auftrag
                                  wuerde sonst faelschlich den ganzen Batch fortsetzen.
+                           - v2.5 Neu: Beim Start wird nach weiteren laufenden
+                                 Dashboard-Prozessen gesucht und im Log genannt.
+                                 Ein zweites Dashboard waere der haeufigste Grund
+                                 fuer Fehler 32 beim HttpListener.Start().
+                           - v2.5 Geaendert: Schlaegt HttpListener.Start() fehl, wird
+                                 nicht nur die Win32-Meldung geschrieben. Das Log
+                                 nennt jetzt die Ursache (URL-Praefix schon
+                                 vergeben), die zum FEHLERZEITPUNKT laufenden
+                                 Instanzen, Port-Listener (PID/Prozess) und
+                                 URL-Reservierungen sowie drei Abhilfen.
+                                 Entscheidend: der Zustand muss im Fehlerfall
+                                 festgehalten werden - ein Port-Check DANACH findet
+                                 nichts mehr, die Registrierung war sofort frei.
 
     BEI ENVELOPE-FEHLERN (Get-MoveRequestStatistics):
         In einer Exchange Management Shell ausführen und Skript neu starten:
@@ -894,6 +907,110 @@ function Get-MoveRequestSchluessel {
     $Name  = Get-Text $MoveRequest.DisplayName
     $Batch = Get-Text $MoveRequest.BatchName
     return "Name:$Name|Batch:$Batch"
+}
+
+function Get-LaufendeDashboardInstanzen {
+    <#
+    .SYNOPSIS
+        Liefert alle laufenden Prozesse, deren Kommandozeile auf eine
+        Dashboard-Skriptdatei zeigt - inklusive des alten Skriptnamens.
+    .DESCRIPTION
+        Fehlerursache Win32 32 beim HttpListener.Start():
+        "Der Prozess kann nicht auf die Datei zugreifen, da sie von einem
+        anderen Prozess verwendet wird."
+
+        Das bedeutet NICHT, dass der Port per netstat belegt ist - es
+        heisst, das URL-Praefix http://localhost:<Port>/ ist bereits
+        registriert (durch ein zweites Dashboard). Der Port ist danach
+        sofort wieder frei, deshalb findet ein spaeterer Check nichts.
+        Aus genau diesem Grund werden die Prozesse im Fehlerfall direkt
+        mitprotokolliert.
+    .OUTPUTS
+        Array von Textzeilen "PID <nr> (<prozess>) - <kommandozeile>".
+        Leer, wenn kein zweiter Prozess gefunden wurde.
+    #>
+
+    $Zeilen = @()
+
+    try {
+        $SkriptMuster = 'Exchange-MoveRequest-Dashboard\.ps1|live_moverequest_statistik\.ps1'
+        $Prozesse = @(Get-CimInstance -ClassName Win32_Process -ErrorAction Stop |
+            Where-Object { $_.ProcessId -ne $PID -and $_.CommandLine -match $SkriptMuster })
+
+        foreach ($Prozess in $Prozesse) {
+            $Zeilen += "PID $($Prozess.ProcessId) ($($Prozess.Name)): $($Prozess.CommandLine)"
+        }
+    }
+    catch {
+        # Prozessliste nicht lesbar (Rechte) - dann eben keine Treffer,
+        # der eigentliche Fehler wird dadurch nie versteckt.
+    }
+
+    return , $Zeilen
+}
+
+function Get-PortDiagnose {
+    <#
+    .SYNOPSIS
+        Beschreibt, was zu einem Zeitpunkt X auf einem Port zu sehen war.
+    .DESCRIPTION
+        Wird ausschliesslich im Fehlerfall des HttpListener.Start()
+        aufgerufen. Die Aufzeichung muss IM MOMENT DES FEHLERS erfolgen -
+        eine Pruefung danach ist wertlos, weil die fehlgeschlagene
+        Registrierung den Zustand bereits wieder aufgeraeumt hat.
+
+        Geliefert werden TCP-Listener (PID und Prozessname) sowie
+        URL-Reservierungen aus netsh fuer den Port.
+    .PARAMETER Port
+        Zu untersuchender Port (Parameter -Port).
+    .OUTPUTS
+        Array von Textzeilen. Leer, wenn nichts zu sehen war.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][int]$Port
+    )
+
+    $Zeilen = @()
+
+    # --- TCP-Listener -------------------------------------------------------
+    $ListenerGefunden = $false
+    try {
+        if (Get-Command Get-NetTCPConnection -ErrorAction SilentlyContinue) {
+            $Eintraege = @(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue)
+            foreach ($Eintrag in $Eintraege) {
+                $ListenerGefunden = $true
+                $ProzessName = "unbekannt"
+                try {
+                    $ProzessName = (Get-Process -Id $Eintrag.OwningProcess -ErrorAction Stop).ProcessName
+                }
+                catch { }
+                $Zeilen += "Port $Port lauscht auf $($Eintrag.LocalAddress) - PID $($Eintrag.OwningProcess) ($ProzessName)"
+            }
+        }
+    }
+    catch { }
+
+    if (-not $ListenerGefunden) {
+        $Zeilen += "Port ${Port}: zum Fehlerzeitpunkt kein TCP-Listener mehr - die gescheiterte Registrierung war sofort wieder frei."
+    }
+
+    # --- URL-Reservierungen (http.sys) -------------------------------------
+    $ReservierungGefunden = $false
+    try {
+        $NetshAusgabe   = @(netsh http show urlacl)
+        $Reservierungen = @($NetshAusgabe | Where-Object { $_ -match ":$Port" })
+        foreach ($Zeile in $Reservierungen) {
+            $ReservierungGefunden = $true
+            $Zeilen += ("URL-Reservierung: " + $Zeile.Trim())
+        }
+    }
+    catch { }
+
+    if (-not $ReservierungGefunden) {
+        $Zeilen += "URL-Reservierung fuer Port ${Port}: keine vorhanden (kein netsh-Eintrag noetig)."
+    }
+
+    return , $Zeilen
 }
 
 # ============================================================================
@@ -4087,6 +4204,24 @@ try {
     Write-Log -Nachricht "Intervall: $AktualisierungsIntervall s | Snapshot-Cache: $CacheIntervall s | Abfrage-Timeout: $AbfrageTimeout s | Leerlaufintervall: $LeerlaufIntervall s" -Typ "INFO"
     if ($BatchName) { Write-Log -Nachricht "Batch-Filter aktiv: $BatchName" -Typ "INFO" }
 
+    # --- Laeuft schon eine zweite Instanz? ---------------------------------
+    # Nur ein HttpListener kann das URL-Praefix belegen. Liegt bereits ein
+    # zweiter Prozess auf der Skriptdatei, ist der Startausschlag vorherseh-
+    # bar - die Warnung kostet nichts und nennt gleich den Schuldigen.
+    $WeitereInstanzen = @(Get-LaufendeDashboardInstanzen)
+    if ($WeitereInstanzen.Count -gt 0) {
+        $Anzahl   = $WeitereInstanzen.Count
+        $Meldung  = "Es laeuft bereits eine weitere Dashboard-Instanz:"
+        if ($Anzahl -gt 1) {
+            $Meldung = "Es laeuft bereits $Anzahl weitere Dashboard-Instanzen:"
+        }
+        Write-Log -Nachricht "HINWEIS: $Meldung" -Typ "WARNUNG"
+        foreach ($Instanz in $WeitereInstanzen) {
+            Write-Log -Nachricht "  $Instanz" -Typ "INFO"
+        }
+        Write-Log -Nachricht "Wenn die auf demselben Port laeuft, bricht der Start gleich mit Fehler 32 ab." -Typ "WARNUNG"
+    }
+
     # --- Exchange 2019 PowerShell Snap-in laden ---
     try {
         if (-not (Get-PSSnapin -Name Microsoft.Exchange.Management.PowerShell.SnapIn -ErrorAction SilentlyContinue)) {
@@ -4131,7 +4266,28 @@ try {
         Write-Log -Nachricht "Zum Beenden: Strg+C oder im Dashboard 'Server stoppen' klicken." -Typ "INFO"
     }
     catch {
-        Write-Log -Nachricht "Fehler beim Starten des HTTP-Servers: $($_.Exception.Message)" -Typ "FEHLER"
+        $Grund = $_.Exception.Message
+        Write-Log -Nachricht "Fehler beim Starten des HTTP-Servers: $Grund" -Typ "FEHLER"
+
+        # Win32 Fehler 32 = das URL-Praefix ist bereits registriert.
+        # DER MOMENT IST ENTSCHEIDEND: ein Port-Check danach findet nichts
+        # mehr, denn die gescheiterte Registrierung war sofort wieder frei.
+        # Deshalb hier sofort festhalten, was gerade zu sehen war.
+        if ($Grund -match 'anderen Prozess|zugreifen|sharing violation|Access is denied|Zugriff verweigert') {
+            Write-Log -Nachricht "URSACHE: Das URL-Praefix '$BaseURL' war schon vergeben - fast immer durch ein zweites Dashboard. Auch die alte Version 'live_moverequest_statistik.ps1' reserviert denselben Port." -Typ "FEHLER"
+
+            foreach ($Instanz in Get-LaufendeDashboardInstanzen) {
+                Write-Log -Nachricht "  Laufende Instanz: $Instanz" -Typ "INFO"
+            }
+            foreach ($Diagnose in Get-PortDiagnose -Port $Port) {
+                Write-Log -Nachricht "  $Diagnose" -Typ "INFO"
+            }
+
+            Write-Log -Nachricht "ABHILFE 1: die andere Instanz beenden (Fenster schliessen bzw. PID beenden)." -Typ "INFO"
+            Write-Log -Nachricht "ABHILFE 2: abweichend starten: .\Exchange-MoveRequest-Dashboard.ps1 -Port 9090" -Typ "INFO"
+            Write-Log -Nachricht "ABHILFE 3: zum Nachsehen IM FEHLERFALL: netstat -ano | findstr :$Port  und  netsh http show urlacl | findstr :$Port" -Typ "INFO"
+        }
+
         Write-Log -Nachricht "TIPP: Skript als Administrator ausfuehren oder Port freigeben:" -Typ "INFO"
         Write-Log -Nachricht "  netsh http add urlacl url=$BaseURL user=$env:USERDOMAIN\$env:USERNAME" -Typ "INFO"
         throw
