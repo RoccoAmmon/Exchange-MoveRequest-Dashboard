@@ -3,6 +3,42 @@
 Alle bemerkenswerten Änderungen an **Exchange-MoveRequest-Dashboard**.
 Die Versionierung folgt `MAJOR.MINOR` – das Skript führt die Versionsnummer in `.NOTES`.
 
+## [2.8] – 08.10.2026
+
+### Behoben
+- **Fehler 32 beim Start (`Die angegebene Adresse ist bereits in Verwendung`).** Die Port-Prüfung
+  lief nur *einmal*, und zwar **vor** Snap-In und erster Sammlung. In diesem rund 11‑sekündigen
+  Fenster (Praxistest: Port um 12:00:22 noch frei, um 12:00:33 von einer zweiten Instanz belegt)
+  konnte das URL-Praefix gewechseln, sodass `$Listener.Start()` mit Fehler 32 scheiterte.
+  Jetzt wird die Prüfung mit der neuen Funktion `Resolve-DashboardPortKonflikt` erneut **unmittelbar
+  vor jedem Startversuch** ausgeführt – und nach einem Fehler 32 wird **einmal nachgelegt**
+  (höchstens 3 Versuche, mit frischem `HttpListener` pro Versuch). Ohne `-KeinAutoStopp` wird nicht
+  nachgelegt, damit sich zwei Instanzen nicht gegenseitig beenden (`Ping-Pong`).
+- **Fehlwarnung „Es läuft bereits eine weitere Dashboard-Instanz".** `return , $Treffer` lieferte dem
+  Aufrufer ein Array mit *einem* leeren Element; mit der `@()`-Umbruchung entstand daraus eine Instanz
+  ohne Felder – sichtbar als die leere Logzeile `PID  (), Port :`. Die Komma-Wraps in
+  `Get-DashboardProzess`, `Get-LaufendeDashboardInstanzen` und `Get-PortDiagnose` sind entfernt.
+- **Light-Zeilen zählten als „offen".** Im Light-Modus wurde `DetailOffen` trotz endgültiger Zeile
+  erhöht, wodurch das Dashboard dauerhaft im Nachhol-Modus geblieben wäre.
+
+### Neu
+- **Parameter `-Light` (Alias `-NurStatus`).** Liefert nur den Status der Verschiebeanforderungen –
+  Anzeigename, Status, Quell-/Ziel-Datenbank und Batch. `Get-MoveRequestStatistics` wird
+  **vollständig ausgelassen**, das ist der eigentliche Geschwindigkeitsgewinn; die Sammlung bleibt
+  bei den Grunddaten aus `Get-MoveRequest`. Die technischen Spalten (Statusdetail, Fortschritt,
+  Übertragen, Gesamtgröße, Items, Bad Items, Start, Abschluss) werden per CSS
+  (`.spalte-technisch`) ausgeblendet, die Fußzeile zeigt `Light-Modus`. Resume-/Löschen-Buttons
+  und die Mehrfachauswahl bleiben voll funktionsfähig.
+- Die Start-Protokollzeile nennt den Light-Modus, die `.NOTES` dokumentieren den Ablauf.
+
+### Getestet
+- 54 Prüfungen neu (`test_light_start.ps1`): Phantom-Zählung, `Resolve-DashboardPortKonflikt`
+  (freier Port, fremder Dienst, `-KeinAutoStopp`, Auto-Stopp mit freiem Präfix), `New-Grundzeile`
+  mit/ohne `-Light`, Sammlung mit und ohne Statistikabrufe sowie das generierte HTML
+  (CSS-Regel, Spaltenklassen, Fußzeile).
+- Wiederholt: Auto-Stopp 11/11, Move-Aktion 18/18, Frontend-Auswahl 38/38, PS-Syntax, UTF‑8-BOM,
+  `node --check`.
+
 ## [2.7] – 08.10.2026
 
 ### Neu

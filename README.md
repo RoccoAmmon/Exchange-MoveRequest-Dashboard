@@ -2,7 +2,7 @@
 
 [![GitLab-Projekt](https://img.shields.io/badge/GitLab-Projekt-FC6D26?logo=gitlab&logoColor=white)](https://gitlab.com/RoccoAmmon/Exchange-MoveRequest-Dashboard)
 [![Lizenz: MIT](https://img.shields.io/badge/Lizenz-MIT-4c1?logo=opensourceinitiative&logoColor=white)](LICENSE)
-[![Version 2.7](https://img.shields.io/badge/Version-2.7-007ec6)](CHANGELOG.md)
+[![Version 2.8](https://img.shields.io/badge/Version-2.8-007ec6)](CHANGELOG.md)
 [![Letzter Commit](https://img.shields.io/gitlab/last-commit/RoccoAmmon/Exchange-MoveRequest-Dashboard)](https://gitlab.com/RoccoAmmon/Exchange-MoveRequest-Dashboard/-/commits/main)
 [![Status: stabil](https://img.shields.io/badge/Status-stabil-brightgreen)](https://gitlab.com/RoccoAmmon/Exchange-MoveRequest-Dashboard/-/wikis/Architektur)
 [![Sprache: Deutsch](https://img.shields.io/badge/Sprache-Deutsch-005BBB?logoColor=white)](https://gitlab.com/RoccoAmmon/Exchange-MoveRequest-Dashboard/-/wikis/home)
@@ -33,7 +33,8 @@ Verschiebeanforderungen lassen sich direkt aus der Web-GUI starten, fortsetzen u
 | **Vorabtest** | `New-MoveRequest -WhatIf` vor dem eigentlichen Start (aus / erst prüfen dann verschieben / nur prüfen) |
 | **Priorität & BadItemLimit** | Auswahl in der GUI, werden direkt an `New-MoveRequest` übergeben |
 | **Stabil bei Last** | Snapshot-Cache, Stats-Cache, parallele Statistikabrufe, gedämmptes Log-Rotation – siehe [Stabilitätskern](#stabilitätskern-v20) |
-| **Zweite Instanz** | Läuft auf dem Ziel-Port schon ein Dashboard, wird diese **beim Start automatisch beendet** (sauber über `/api/stop`, sonst `Stop-Process`) – der Fehler 32 tritt gar nicht mehr auf. Abschaltbar mit `-KeinAutoStopp` |
+| **Zweite Instanz** | Läuft auf dem Ziel-Port schon ein Dashboard, wird diese **beim Start automatisch beendet** (sauber über `/api/stop`, sonst `Stop-Process`) – Abschaltbar mit `-KeinAutoStopp`. Geprüft wird **zweimal**: einmal früh beim Start und noch einmal unmittelbar **vor** `$Listener.Start()`; nach Fehler 32 wird einmal nachgelegt |
+| **Light-Modus** | `-Light` (Alias `-NurStatus`): nur Anzeigename, Status, Quell-/Ziel-DB und Batch – `Get-MoveRequestStatistics` bleibt komplett aus, die technischen Spalten sind ausgeblendet. Deutlich schneller bei vielen hundert Verschiebeanforderungen |
 | **Filter** | Auf einen Move-Batch eingeschränkt starten (`-BatchName`), Quell-/Ziel-Datenbank frei wählbar |
 
 ## Voraussetzungen
@@ -70,6 +71,9 @@ Dashboard beenden: Schalter **„Server stoppen"** in der GUI oder `GET http://l
 
 # Ohne Browserstart (z. B. für Remote-Sessions)
 .\Exchange-MoveRequest-Dashboard.ps1 -KeinBrowser
+
+# Light-Modus: nur der Status der Verschiebeanforderungen, ohne technische Werte
+.\Exchange-MoveRequest-Dashboard.ps1 -Light
 ```
 
 ## Parameter
@@ -86,6 +90,7 @@ Dashboard beenden: Schalter **„Server stoppen"** in der GUI oder `GET http://l
 | `-MaxDetailAbrufe` | `0` | Max. Statistikabrufe pro Sammlung, `0` = unbegrenzt |
 | `-KeinBrowser` | aus | Browser nicht automatisch öffnen |
 | `-KeinAutoStopp` | aus | Andere Instanz auf demselben Port **nicht** automatisch beenden |
+| `-Light` | aus | Light-Modus (Alias `-NurStatus`): nur Status, Name, Quell-/Ziel-DB und Batch – keine Statistikabrufe, technische Spalten ausgeblendet |
 
 ## API-Routen
 
@@ -159,11 +164,16 @@ Get-CimInstance Win32_Process |
 Seit **v2.5** schreibt das Skript genau diese Daten (laufende Instanzen, Port-Listener, `netsh`-Reservierungen)
 automatisch ins Log, sobald der Start scheitert.
 
-Seit **v2.6** tritt der Fehler gar nicht mehr auf: Eine auf dem Ziel-Port laufende Instanz wird
-**vor** dem Start automatisch beendet – zuerst per HTTP geprüft (das findet auch eine in einer
-offenen Konsole gestartete Instanz, deren Prozess die Skriptdatei nicht in der Kommandozeile
-trägt), dann sauber über deren `/api/stop`, im Notfall per `Stop-Process`. Mit `-KeinAutoStopp`
-ist das deaktiviert.
+Seit **v2.6** wird eine auf dem Ziel-Port laufende Instanz **vor** dem Start automatisch beendet – zuerst
+per HTTP geprüft (das findet auch eine in einer offenen Konsole gestartete Instanz, deren Prozess die
+Skriptdatei nicht in der Kommandozeile trägt), dann sauber über deren `/api/stop`, im Notfall per
+`Stop-Process`. Mit `-KeinAutoStopp` ist das deaktiviert.
+
+**Seit v2.8** wird die Prüfung **zweimal** ausgeführt: beim Start und noch einmal unmittelbar **vor**
+`$Listener.Start()`. Dazwischen liegen Snap-In und erste Sammlung (rund 11 Sekunden) – genau in diesem
+Fenster konnte sich eine zweite Instanz das URL-Praefix schnappen, worauf der Start mit Fehler 32
+scheiterte. Schlägt der Start trotzdem mit einem Präfix-Konflikt fehl, wird **einmal nachgelegt**
+(höchstens 3 Versuche, ohne `Ping-Pong` zwischen zwei Instanzen).
 
 **Dashboard lädt, aber die Tabelle bleibt leer**
 Prüfen, ob überhaupt MoveRequests existieren (`Get-MoveRequest`) und ob der Exchange-Management-Zugriff
@@ -177,6 +187,7 @@ Alle Änderungen siehe [CHANGELOG.md](CHANGELOG.md).
 
 | Version | Schwerpunkt |
 |---|---|
+| 2.8 | Fehler 32 behoben (Prüfung direkt vor `$Listener.Start()` + ein Nachlegen), Light-Modus `-Light` |
 | 2.7 | Mehrfachauswahl suspendierter Anforderungen – auswählen und mit einem Klick abschließen (`Identities`) |
 | 2.6 | Zweite Instanz auf demselben Port wird beim Start automatisch beendet (Fehler 32 vorab), `-KeinAutoStopp` |
 | 2.5 | Diagnose beim Startfehler: zweite Instanz, Port-Listener und URL-Reservierungen im Fehlerfall |
