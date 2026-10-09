@@ -46,9 +46,11 @@
       /api/databases   -> Liefert alle Postfachdatenbanken (Quell-/Ziel-Auswahl)
       /api/benutzer    -> Liefert die Postfaecher (?quelle=NAME, ohne
                           quelle = alle Postfaecher aller Datenbanken;
-                          ?typ=benutzer|sonder|alle waehlt die Postfachart:
-                          Sonderpostfaecher = Arbitration, AuditLog,
-                          AuxAuditLog, PublicFolder, Archiv, ...)
+                          ?typ=benutzer|sonder|alle|archiv waehlt die
+                          Postfachart: Sonderpostfaecher = Arbitration,
+                          AuditLog, AuxAuditLog, PublicFolder, Archiv,
+                          SystemMailbox, Migration, Discovery; archiv =
+                          alle Postfaecher mit aktiviertem Archiv)
       /api/move        -> Erstellt Verschiebeanforderungen (POST, JSON-Body
                           mit Quelle, Ziel, Benutzer, Suspend, Prioritaet,
                           Vorabtest und BadItemLimit)
@@ -63,8 +65,10 @@
     Autor:          Rocco Ammon
     Erstelldatum:   26.02.2026
     Stand:          09.10.2026
-    Version:        2.11 (Versionsnummer sichtbar in der Web-Oberflaeche:
-                            Kopfzeile, Seitentitel und Fusszeile)
+    Version:        2.12 (Sonderpostfaecher wirklich abfragen: die
+                            Schalter -Arbitration, -AuditLog, -AuxAuditLog,
+                            -Migration, -PublicFolder und -Archive; dazu
+                            Ansicht "Postfaecher mit Archiv")
     Voraussetzung:  Exchange Server 2019 On-Premises
     Log-Pfad:       C:\ExchangeMigrationLog
     HINWEIS:        Muss als Administrator ausgeführt werden (HttpListener benötigt dies)
@@ -295,6 +299,24 @@
                                   Skripts, es gibt also nur EINE Quelle und
                                   Oberflaeche und Skript koennen nicht
                                   auseinanderlaufen.
+                            - v2.12 Fix: Get-Mailbox OHNE Schalter liefert die
+                                  System- und Arbitration-Postfaecher nicht -
+                                  in der Sonderpostfaecher-Liste erschien daher
+                                  nur das Discoverysuchpostfaech, waehrend
+                                  SystemMailbox{...}, FederatedEmail und
+                                  Migration.fehlten. Get-BenutzerListe fragt
+                                  deshalb zusaetzlich mit -Arbitration,
+                                  -AuditLog, -AuxAuditLog, -Migration,
+                                  -PublicFolder und -Archive ab (jede Quelle
+                                  einzeln abgefangen, Verfuegbarkeit ueber
+                                  Get-Command geprueft, Ergebnisse nach
+                                  Identitaet zusammengefuehrt). Neu dazu:
+                                  Ansicht "Postfaecher mit Archiv" (?typ=archiv)
+                                  und das Feld "Archiv". Get-PostfachTyp
+                                  prueft zusaetzlich Namensmuster
+                                  (SystemMailbox{...}, FederatedEmail.,
+                                  Migration., HealthMailbox) fuer Postfaecher
+                                  ohne brauchbaren RecipientTypeDetails-Wert.
 
     BEI ENVELOPE-FEHLERN (Get-MoveRequestStatistics):
         In einer Exchange Management Shell ausführen und Skript neu starten:
@@ -1516,8 +1538,13 @@ function Get-PostfachTyp {
         abweichen (ArbitrationMailbox, SystemMailbox{...}, PlusArchive, ...).
 
     .PARAMETER RecipientTypeDetails
-        RecipientTypeDetails des Postfachs - darf und darf leer sein
-        (Sonderpostfaecher ohne Typ werden dann als Benutzer gefuehrt).
+        RecipientTypeDetails des Postfachs - darf und darf leer sein.
+    .PARAMETER Name
+        Identity, Anzeigename und Alias des Postfachs, zusammengefuegt in
+        Einen String. Wird NUR ausgewertet, wenn der RecipientTypeDetails-
+        Wert leer oder unbekannt ist: die Namensmuster fangen dann System-
+        und Arbitration-Postfaecher ab, die ohne brauchbaren Typ geliefert
+        werden (sonst faelen sie als "Benutzer" in die normale Liste).
     .OUTPUTS
         String - "Benutzer", die Bezeichnung der Sonderart oder ""
         (Postfach wird gar nicht angezeigt).
@@ -1525,22 +1552,59 @@ function Get-PostfachTyp {
     param(
         [Parameter(Mandatory = $false)]
         [AllowEmptyString()]
-        [string]$RecipientTypeDetails = ""
+        [string]$RecipientTypeDetails = "",
+
+        [Parameter(Mandatory = $false)]
+        [AllowEmptyString()]
+        [string]$Name = ""
     )
 
-    if ([string]::IsNullOrWhiteSpace($RecipientTypeDetails)) { return "Benutzer" }
-
+    # --- Quelle 1: RecipientTypeDetails (die zuverlaessigste Angabe) --
     # Die Reihenfolge ist entscheidend: "AuxAuditLogMailbox" enthaelt
-    # ebenfalls "Audit" und muesste sonst fälschlich als AuditLog landen.
-    if ($RecipientTypeDetails -match 'AuxAudit')      { return "AuxAuditLog" }
-    if ($RecipientTypeDetails -match 'Audit')         { return "AuditLog" }
-    if ($RecipientTypeDetails -match 'Arbitration')   { return "Arbitration" }
-    if ($RecipientTypeDetails -match 'PublicFolder')  { return "PublicFolder" }
-    if ($RecipientTypeDetails -match 'Archive')       { return "Archiv" }
-    if ($RecipientTypeDetails -match 'SystemMailbox') { return "SystemMailbox" }
-    if ($RecipientTypeDetails -match 'Migration')     { return "Migration" }
-    if ($RecipientTypeDetails -match 'Discovery')     { return "Discovery" }
-    if ($RecipientTypeDetails -match 'Health')        { return "" }
+    # ebenfalls "Audit" und muesste sonst faelschlich als AuditLog landen.
+    if (-not [string]::IsNullOrWhiteSpace($RecipientTypeDetails)) {
+        if ($RecipientTypeDetails -match 'AuxAudit')      { return "AuxAuditLog" }
+        if ($RecipientTypeDetails -match 'Audit')         { return "AuditLog" }
+        if ($RecipientTypeDetails -match 'Arbitration')   { return "Arbitration" }
+        if ($RecipientTypeDetails -match 'PublicFolder')  { return "PublicFolder" }
+        if ($RecipientTypeDetails -match 'Archive')       { return "Archiv" }
+        if ($RecipientTypeDetails -match 'SystemMailbox') { return "SystemMailbox" }
+        if ($RecipientTypeDetails -match 'Migration')     { return "Migration" }
+        if ($RecipientTypeDetails -match 'Discovery')     { return "Discovery" }
+        # HealthMailbox und MonitoringMailbox (Managed Availability) -
+        # beide bleiben verborgen, sonst wuechse die Benutzerliste um
+        # tausende System-Eintraege.
+        if ($RecipientTypeDetails -match 'Health')        { return "" }
+        if ($RecipientTypeDetails -match 'Monitoring')    { return "" }
+
+        # Ausdruecklicher Benutzer-RTD: die Namensmuster duerfen dann
+        # nichts mehr ueberschreiben - der ausdruecklich gemeldete Typ
+        # gewinnt. Ohne diese Regel ergabe ein normales Benutzerpostfach
+        # mit zufaellig passendem Namen eine Sonderkategorie.
+        if ($RecipientTypeDetails -match 'UserMailbox|SharedMailbox|LinkedMailbox|RoomMailbox|EquipmentMailbox|TeamMailbox|LegacyMailbox|SchedulingMailbox|MailboxPlan') {
+            return "Benutzer"
+        }
+    }
+
+    # --- Quelle 2: Namensmuster ---------------------------------------
+    # Greift nur bei leerem oder unbekanntem RecipientTypeDetails. Die
+    # Muster bleiben absichtlich ohne Startanker und mit Trennzeichen
+    # (SystemMailbox{, FederatedEmail., Migration.), weil die Identity
+    # auch als DN kommen kann ("CN=SystemMailbox{...},CN=System,...");
+    # Treffer sind ausserdem immer mit den echten Sonderpostfach-Namen
+    # dokumentiert (MS: FederatedEmail, Migration., SystemMailbox{...}).
+    # Reihenfolge wie oben: AuxAudit vor Audit, sonst landete
+    # "AuxAuditMailbox" als AuditLog.
+    if (-not [string]::IsNullOrWhiteSpace($Name)) {
+        if ($Name -match 'AuxAuditMailbox')                     { return "AuxAuditLog" }
+        if ($Name -match 'AuditMailbox')                        { return "AuditLog" }
+        if ($Name -match 'HealthMailbox')                       { return "" }
+        if ($Name -match 'MsExchDiscoveryMailbox')              { return "Discovery" }
+        if ($Name -match 'DiscoverySearchMailbox')              { return "Discovery" }
+        if ($Name -match 'SystemMailbox\{')                     { return "SystemMailbox" }
+        if ($Name -match 'FederatedEmail\.')                    { return "Arbitration" }
+        if ($Name -match 'Migration\.')                         { return "Migration" }
+    }
 
     return "Benutzer"
 }
@@ -1559,8 +1623,16 @@ function Get-BenutzerListe {
 
         Postfaecher lassen sich ueber -Typ trennen: Benutzerpostfaecher
         (Standard), Sonderpostfaecher (Arbitration, AuditLog, AuxAuditLog,
-        PublicFolder, Archiv, ...) oder alles zusammen. Health-Postfaecher
-        werden in keiner Ansicht gezeigt.
+        PublicFolder, Archiv, SystemMailbox, Migration, Discovery), alles
+        zusammen oder alle Postfaecher mit aktiviertem Archiv
+        (Typ archiv). Health-Postfaecher werden in keiner Ansicht gezeigt.
+
+        WICHTIG: Get-Mailbox OHNE Schalter liefert System- und
+        Arbitration-Postfaecher NICHT - die brauchen jeweils eigene
+        Schalter (-Arbitration, -AuditLog, -AuxAuditLog, -Migration,
+        -PublicFolder, -Archive). Darum werden mehrere Abragen
+        zusammengefuehrt; ein Fehler einzelner Quellen bleibt ohne Folgen
+        auf die uebrigen.
 
     .PARAMETER QuellDatenbank
         Name der Postfachdatenbank, deren Postfaecher gelistet werden.
@@ -1569,11 +1641,12 @@ function Get-BenutzerListe {
     .PARAMETER Typ
         benutzer (Standard) = normale Postfaecher,
         sonder   = nur die Sonderpostfaecher,
-        alle     = beides zusammen.
+        alle     = beides zusammen,
+        archiv   = alle Postfaecher mit aktiviertem Archiv.
     .OUTPUTS
         Array von PSCustomObject: AnzeigeName, Adresse, Alias, Datenbank,
-        Typ (Kategorie), Schluessel (Identitaet fuer Auswahl und
-        Verschiebung), Bewegt, Status.
+        Typ (Kategorie), Archiv (Postfach hat ein Archiv), Schluessel
+        (Identitaet fuer Auswahl und Verschiebung), Bewegt, Status.
     #>
     param(
         [Parameter(Mandatory = $false)]
@@ -1581,19 +1654,104 @@ function Get-BenutzerListe {
         [string]$QuellDatenbank = "",
 
         [Parameter(Mandatory = $false)]
-        [ValidateSet("benutzer", "sonder", "alle")]
+        [ValidateSet("benutzer", "sonder", "alle", "archiv")]
         [string]$Typ = "benutzer"
     )
 
-    # Ohne Quelle wird die gesamte Organisation abgefragt (ein einziger
-    # Exchange-Aufruf, kein Clientseitiges Zusammenfuehren mehrerer DBs).
-    $Abfrage = @{ ResultSize = 'Unlimited'; ErrorAction = 'Stop' }
+    # Ohne Quelle wird die gesamte Organisation abgefragt.
+    $BasisAbfrage = @{ ResultSize = 'Unlimited'; ErrorAction = 'Stop' }
     if (-not [string]::IsNullOrWhiteSpace($QuellDatenbank)) {
-        $Abfrage['Database'] = $QuellDatenbank
+        $BasisAbfrage['Database'] = $QuellDatenbank
     }
 
-    $Postfaecher = @(Get-Mailbox @Abfrage |
-        Sort-Object @{ Expression = { Get-DatenbankAnzeige $_.Database } }, DisplayName)
+    # --- Zusammenfuehrung mehrerer Get-Mailbox-Abfragen ---------------
+    # Ursache fuer leere Sonderlisten: Get-Mailbox ohne Schalter gibt die
+    # System- und Arbitration-Postfaecher nicht heraus (Microsoft-Doku:
+    # "return only arbitration mailboxes" braucht -Arbitration; AuditLog
+    # und AuxAuditLog haben eigene Schalter). Es erschien daher nur das
+    # Discoverysuchpostfaech, waehrend SystemMailbox{...}, FederatedEmail
+    # und Migration.fehlten.
+    # -Monitoring bleibt bewusst draussen: Health-Mailboxen sollen wie
+    # bisher nirgends auftauchen.
+    $ZusatzSchalter = @('Arbitration', 'AuditLog', 'AuxAuditLog',
+                        'Migration', 'PublicFolder', 'Archive')
+
+    # Verfuegbarkeit vorab pruefen: ein Schalter, den diese Exchange-
+    # Version nicht kennt, darf die Liste nicht zerstoeren.
+    $SchalterVerfuegbar = @{}
+    $MailboxBefehl = Get-Command Get-Mailbox -ErrorAction SilentlyContinue
+    if ($null -ne $MailboxBefehl) {
+        foreach ($Schalter in $ZusatzSchalter) {
+            $SchalterVerfuegbar[$Schalter] = $MailboxBefehl.Parameters.ContainsKey($Schalter)
+        }
+    }
+
+    # Die Grundabfrage laeuft immer - alle Zusaetze sind Zusatz, kein
+    # Ersatz. Reihenfolge: Standard zuerst, damit ein doppelt
+    # geliefertes Objekt (z.B. Hauptpostfach aus -Archive) sein
+    # urspruengliches Objekt behaelt.
+    $Abfragen = @( @{ Name = 'Standard'; Schalter = '' } )
+    foreach ($Schalter in $ZusatzSchalter) {
+        if ($SchalterVerfuegbar[$Schalter]) {
+            $Abfragen += @{ Name = $Schalter; Schalter = $Schalter }
+        }
+    }
+
+    $Gesammelt = @{}   # Schluessel -> Mailbox-Objekt (erster Treffer gewinnt)
+    $Quellen   = @{}   # Schluessel -> Namen der Quellen, die es geliefert haben
+    $Laufnummer = 0
+
+    foreach ($Abfrage in $Abfragen) {
+        $Parameter = $BasisAbfrage.Clone()
+        if (-not [string]::IsNullOrWhiteSpace([string]$Abfrage['Schalter'])) {
+            $Parameter[$Abfrage['Schalter']] = $true
+        }
+
+        try {
+            foreach ($Postfach in @(Get-Mailbox @Parameter)) {
+                # Schluessel fuer die Zusammenfuehrung: Identity, sonst
+                # DN, sonst Anzeigename - einzelne Eigenschaften koennen
+                # bei Sonderpostfaechern fehlen.
+                $Schluessel = Get-Text $Postfach.Identity
+                if ([string]::IsNullOrWhiteSpace($Schluessel)) { $Schluessel = Get-Text $Postfach.DistinguishedName }
+                if ([string]::IsNullOrWhiteSpace($Schluessel)) { $Schluessel = Get-Text $Postfach.DisplayName }
+                if ([string]::IsNullOrWhiteSpace($Schluessel)) { $Schluessel = Get-Text $Postfach.PrimarySmtpAddress }
+                if ([string]::IsNullOrWhiteSpace($Schluessel)) { $Laufnummer++; $Schluessel = "ohne-schluessel-$Laufnummer" }
+
+                if (-not $Gesammelt.ContainsKey($Schluessel)) {
+                    $Gesammelt[$Schluessel] = $Postfach
+                    $Quellen[$Schluessel]   = @()
+                }
+                if (@($Quellen[$Schluessel]) -notcontains [string]$Abfrage['Name']) {
+                    $Quellen[$Schluessel] += [string]$Abfrage['Name']
+                }
+            }
+        }
+        catch {
+            # Einzelne Quelle nicht erreichbar: die uebrigen liefern
+            # weiterhin eine brauchbare Liste, also nur protokollieren.
+            Write-Log "Postfachabfrage '$($Abfrage['Name'])' schlug fehl: $($_.Exception.Message)" "WARNUNG"
+        }
+    }
+
+    # Sortierung erst nach der Zusammenfuehrung - die Reihenfolge der
+    # Abfragen soll die Anzeige nicht bestimmen. Als dritter Schluessel
+    # dienst die Identity, weil mehrere SystemMailboxen denselben
+    # Anzeigenamen ("Microsoft Exchange") tragen.
+    # ACHTUNG: die Property-Liste bewusst EINZEILIG mit @(...) - bei
+    # Zeilenumbruechen wertete PowerShell 5.1 die Expression-Hashtables
+    # als eigene Ausdruecke aus und die Hashtables landeten mit in der
+    # Ergebnisliste (drei Phantom-Eintraege "System.Collections.Hashtable").
+    $SortierFelder  = @('Datenbank', 'AnzeigeName', 'Identitaet')
+    $SortierObjekte = @($Gesammelt.Keys | ForEach-Object {
+        [pscustomobject]@{
+            Schluessel  = $_
+            Datenbank   = Get-DatenbankAnzeige $Gesammelt[$_].Database
+            AnzeigeName = Get-Text $Gesammelt[$_].DisplayName
+            Identitaet  = Get-Text $Gesammelt[$_].Identity
+        }
+    })
+    $SchluesselSortiert = @($SortierObjekte | Sort-Object -Property $SortierFelder | ForEach-Object { $_.Schluessel })
 
     # Alle MoveRequests einmalig abrufen und auf zwei Schluessel abbilden:
     # DistinguishedName des Postfachs und den Anzeigenamen. Danach kostet die
@@ -1616,15 +1774,39 @@ function Get-BenutzerListe {
     # @() rundet auch den Sonderfall ab: keine Treffer ergibt ein leeres
     # Array statt $null (JSON "Benutzer: null" hielte die JS-Seite fuer
     # einen Fehler).
-    $Ergebnis = @(foreach ($Postfach in $Postfaecher) {
+    $Ergebnis = @(foreach ($Eintrag in $SchluesselSortiert) {
+        $Postfach     = $Gesammelt[$Eintrag]
+        $QuellenListe = @($Quellen[$Eintrag])
+
+        # Archiv-Kennung: jede Quelle, die die -Archive-Abfrage geliefert
+        # hat, ist ein Postfach mit aktiviertem Archiv - unabhaengig davon,
+        # ob es noch aus der Grundabfrage kam.
+        $HatArchiv = $QuellenListe -contains 'Archive'
+
         # Kategorie ermitteln: "Benutzer", die Bezeichnung der Sonderart
-        # oder "" (Health-Postfach - gar nicht zeigen).
-        $Art = Get-PostfachTyp -RecipientTypeDetails (Get-Text $Postfach.RecipientTypeDetails)
+        # oder "" (Health-Postfach - gar nicht zeigen). Der Namensschnipsel
+        # ist die zweite Quelle fuer Postfaecher ohne brauchbaren
+        # RecipientTypeDetails-Wert (SystemMailbox{...} und Konsorten).
+        $SuchNamen = ((Get-Text $Postfach.Identity) + ' ' +
+                      (Get-Text $Postfach.DisplayName) + ' ' +
+                      (Get-Text $Postfach.Alias)).Trim()
+        $Art = Get-PostfachTyp -RecipientTypeDetails (Get-Text $Postfach.RecipientTypeDetails) `
+                               -Name $SuchNamen
+
+        # Postfach, das NUR die Archiv-Abfrage liefert, ist ein eigenes
+        # Archiv-Postfach -> Kategorie "Archiv". Kommt es auch aus der
+        # Grundabfrage (Hauptpostfach mit Archiv), bleibt es Benutzer-
+        # postfach - sonst verschwanden Archivbenutzer aus der normalen
+        # Ansicht, waehrend sie dort weiterhin gebraucht werden.
+        if ($Art -eq "Benutzer" -and $HatArchiv -and ($QuellenListe -notcontains 'Standard')) {
+            $Art = "Archiv"
+        }
 
         $Passt = switch ($Typ) {
             "benutzer" { $Art -eq "Benutzer" }
             "sonder"   { $Art -ne "Benutzer" -and $Art -ne "" }
             "alle"     { $Art -ne "" }
+            "archiv"   { $HatArchiv -and $Art -ne "" }
         }
         if (-not $Passt) { continue }
 
@@ -1655,6 +1837,7 @@ function Get-BenutzerListe {
             Alias       = Get-Text $Postfach.Alias
             Datenbank   = Get-DatenbankAnzeige $Postfach.Database
             Typ         = $Art
+            Archiv      = [bool]$HatArchiv
             Schluessel  = $Schluessel
             Bewegt      = ($null -ne $Status)
             Status      = Get-Text $Status
@@ -3729,6 +3912,7 @@ $LightCSS
                             title="Sonderpostfaecher werden in der Normalansicht bewusst nicht angezeigt">
                         <option value="benutzer" selected>Benutzerpostfächer</option>
                         <option value="sonder">Sonderpostfächer (Arbitration, AuditLog, AuxAuditLog, PublicFolder, Archiv)</option>
+                        <option value="archiv">Postfächer mit Archiv</option>
                         <option value="alle">Alle (Benutzer- und Sonderpostfächer)</option>
                     </select>
                 </div>
@@ -4355,8 +4539,8 @@ $LightCSS
 
         /**
          * Baut die Adresse fuer /api/benutzer inklusive Quell-Datenbank
-         * und Postfachart (benutzer | sonder | alle). Als eigene Funktion,
-         * damit sich die Parameterkette testen laesst.
+         * und Postfachart (benutzer | sonder | alle | archiv). Als eigene
+         * Funktion, damit sich die Parameterkette testen laesst.
          */
         function benutzerApiAdresse(quelle, typ) {
             const parameter = [];
@@ -4393,7 +4577,7 @@ $LightCSS
         /**
          * Laedt die Postfaecher. Ohne Quelldatenbank werden alle
          * Postfaecher aller Datenbanken angezeigt. Die Postfachart
-         * (benutzer | sonder | alle) kommt aus dem Auswahlfeld.
+         * (benutzer | sonder | alle | archiv) kommt aus dem Auswahlfeld.
          */
         async function benutzerLaden() {
             const quelle = document.getElementById('quellDatenbank').value;
@@ -4463,7 +4647,8 @@ $LightCSS
                 if (!filter) return true;
                 const text = ((b.AnzeigeName || '') + ' ' + (b.Adresse || '') + ' ' +
                               (b.Alias || '') + ' ' + (b.Typ || '') + ' ' +
-                              (b.Datenbank || '')).toLowerCase();
+                              (b.Datenbank || '') + ' ' +
+                              (b.Archiv ? 'archiv' : '')).toLowerCase();
                 return text.indexOf(filter) !== -1;
             });
         }
@@ -4524,6 +4709,17 @@ $LightCSS
                     zeile.appendChild(marke);
                 }
 
+                // Postfach mit aktiviertem Archiv: erklaert in der Ansicht
+                // "Postfaecher mit Archiv", warum ein sonst normales
+                // Benutzerpostfach hier steht - sonst bliebe die Zeile
+                // ohne sichtbaren Grund in der Liste.
+                if (b.Archiv && b.Typ !== 'Archiv') {
+                    const marke = document.createElement('span');
+                    marke.className = 'typ-tag';
+                    marke.textContent = 'Archiv';
+                    zeile.appendChild(marke);
+                }
+
                 // Datenbankzugehoerigkeit rechts - besonders wichtig, wenn
                 // ohne Quell-Datenbank alle Postfaecher angezeigt werden.
                 const datenbank = document.createElement('span');
@@ -4551,6 +4747,7 @@ $LightCSS
             const artText = {
                 benutzer: 'Benutzerpostfächer',
                 sonder:   'Sonderpostfächer',
+                archiv:   'Postfächer mit Archiv',
                 alle:     'Benutzer- und Sonderpostfächer'
             }[typ] || 'Postfächer';
 
@@ -5392,13 +5589,14 @@ try {
                     $QuellDatenbank = ""
                     try { $QuellDatenbank = [string]$Anfrage.QueryString["quelle"] } catch { }
 
-                    # Postfachart: benutzer (Standard) | sonder | alle.
-                    # Ein unbekannter Wert faellt bewusst auf "benutzer" zurueck,
-                    # damit die Seite auch mit altem JavaScript noch normal laeuft.
+                    # Postfachart: benutzer (Standard) | sonder | alle |
+                    # archiv. Ein unbekannter Wert faellt bewusst auf
+                    # "benutzer" zurueck, damit die Seite auch mit altem
+                    # JavaScript noch normal laeuft.
                     $Typ = "benutzer"
                     try {
                         $TypRoh = [string]$Anfrage.QueryString["typ"]
-                        if ($TypRoh -in @("benutzer", "sonder", "alle")) { $Typ = $TypRoh }
+                        if ($TypRoh -in @("benutzer", "sonder", "alle", "archiv")) { $Typ = $TypRoh }
                     }
                     catch { }
 
