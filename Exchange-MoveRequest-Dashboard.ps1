@@ -65,13 +65,13 @@
     Autor:          Rocco Ammon
     Erstelldatum:   26.02.2026
     Stand:          09.10.2026
-    Version:        2.13 (Fehlerdiagnose: fehlgeschlagene Verschiebungen
-                            erklaeren sich selbst - Ausfuehrungskontext,
-                            technische Details und Handlungshinweis bei
-                            "Zugriff wurde verweigert")
+    Version:        2.14 (Selbst-Elevation: ohne Admin-Rechte wird das
+                            Skript automatisch mit UAC elevated neu
+                            gestartet, alle Parameter bleiben erhalten;
+                            bei Ablehnung Warnung und Weiterlauf)
     Voraussetzung:  Exchange Server 2019 On-Premises
     Log-Pfad:       C:\ExchangeMigrationLog
-    HINWEIS:        Muss als Administrator ausgeführt werden (HttpListener benötigt dies)
+    HINWEIS:        Startet ohne Admin-Rechte automatisch mit UAC elevated neu (Selbst-Elevation, v2.14); Absage = Warnung und Weiterlauf ohne Erhoehung
 
     Aenderungen:    v1.0 - Initiale Version
                     v2.0 - Fix: OutputStream.Close() stand außerhalb des finally.
@@ -332,6 +332,19 @@
                                   geschrieben - so ist nachvollziehbar, in
                                   welchem Konto Dashboard und Verschiebe-Job
                                   laufen.
+                            - v2.14 Neu: Selbst-Elevation - startet das
+                                  Skript ohne Admin-Rechte, wird es mit
+                                  UAC elevated neu gestartet; alle
+                                  uebergebenen Parameter gehen mit
+                                  (New-ElevationsArgumente), das
+                                  Ausgangsfenster schliesst. Lehnt der
+                                  Nutzer die UAC-Frage ab, laeuft das
+                                  Skript ohne Erhoehung weiter - mit
+                                  Warnung im Log und einem Hinweisdialog,
+                                  denn System- und Arbitration-Postfaecher
+                                  brauchen das erhoehte Token (sonst
+                                  meldet der MRS "Der Zugriff wurde
+                                  verweigert").
 
     BEI ENVELOPE-FEHLERN (Get-MoveRequestStatistics):
         In einer Exchange Management Shell ausführen und Skript neu starten:
@@ -1484,6 +1497,104 @@ function Get-PortDiagnose {
 }
 
 # ============================================================================
+# ============================================================================
+# Region: Selbsterhoehung (v2.14) - elevated Neustart
+# ============================================================================
+# System- und Arbitration-Postfaecher lassen sich nur mit dem erhoehten
+# Token verschieben: ohne UAC bleiben privilegierte Gruppen im Token auf
+# "deny-only", und der Mailbox Replication Service antwortet auf jeden
+# Versuch mit "Der Zugriff wurde verweigert". Deshalb startet sich das
+# Skript ohne Admin-Rechte einmal selbst mit RunAs neu.
+
+function Test-IstAdministrator {
+    <#
+    .SYNOPSIS
+        Prueft, ob das Skript mit erhoehten Rechten (Administrator) laeuft.
+    .OUTPUTS
+        Boolean; $false, wenn die Identitaet nicht abgefragt werden kann
+    #>
+    try {
+        $Ident = [System.Security.Principal.WindowsIdentity]::GetCurrent()
+        $Principal = New-Object System.Security.Principal.WindowsPrincipal($Ident)
+        return $Principal.IsInRole([System.Security.Principal.WindowsBuiltInRole]::Administrator)
+    }
+    catch {
+        return $false
+    }
+}
+
+function New-ElevationsArgumente {
+    <#
+    .SYNOPSIS
+        Baut die Argumentliste fuer den elevated Neustart des Skripts.
+    .DESCRIPTION
+        powershell.exe -File erwartet die Parameter als Kommandozeilentext.
+        Zahlen und Zeichenketten kommen in Anfuehrungszeichen an (der
+        -File-Parser entfernt sie wieder), gesetzte Schalter als -Name.
+        Ausdruecklich abgeschaltete Schalter werden NICHT mitgenommen:
+        powershell.exe -File kann -Name:$false nicht uebernehmen (es
+        schlaegt mit einem Typfehler fehl), und ein abgeschalteter
+        Schalter entspricht ohnehin dem Default - das Kind startet so
+        mit exakt denselben Einstellungen wie der Aufrufer.
+    .PARAMETER SkriptPfad
+        $PSCommandPath des laufenden Skripts.
+    .PARAMETER GebundeneParameter
+        $PSBoundParameters - alle vom Aufrufer gesetzten Parameter.
+        Nicht gesetzte Parameter fehlen komplett; das Kind behaelt die
+        Skript-Defaults.
+    .OUTPUTS
+        String[] - Argumente fuer Start-Process -ArgumentList
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$SkriptPfad,
+
+        [Parameter(Mandatory = $false)]
+        [System.Collections.IDictionary]$GebundeneParameter
+    )
+
+    $Argumente = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ('"{0}"' -f $SkriptPfad))
+
+    if ($null -ne $GebundeneParameter) {
+        foreach ($Name in $GebundeneParameter.Keys) {
+            $Wert = $GebundeneParameter[$Name]
+            if (($Wert -is [System.Management.Automation.SwitchParameter]) -or ($Wert -is [bool])) {
+                if ([bool]$Wert) { $Argumente += ('-{0}' -f $Name) }
+            }
+            else {
+                $Argumente += ('-{0}' -f $Name)
+                $Argumente += ('"{0}"' -f $Wert)
+            }
+        }
+    }
+
+    return $Argumente
+}
+
+function Show-ElevationsHinweis {
+    <#
+    .SYNOPSIS
+        Hinweisdialog, wenn die UAC-Frage abgelehnt wurde.
+    .DESCRIPTION
+        Beim Doppelklick schliesst sich das Fenster nach der Ablehnung -
+        die Log-Warnung ueberlebt zwar, wird aber niemand lesen. Der
+        Dialog macht die fehlenden Rechte sofort sichtbar. Schlaegt er
+        fehl (z.B. ohne Windows Forms), wird still weitergemacht; die
+        Warnung im Log bleibt in jedem Fall.
+    #>
+    try {
+        Add-Type -AssemblyName System.Windows.Forms -ErrorAction Stop
+        $Text  = "Das Skript wurde NICHT als Administrator gestartet (UAC abgelehnt).`n`n" +
+                 "System- und Arbitration-Postfaecher lassen sich dann nicht verschieben -" +
+                 " Exchange meldet 'Der Zugriff wurde verweigert'.`n`n" +
+                 "Bitte erneut starten und der UAC-Frage zustimmen."
+        $Titel = "Exchange-MoveRequest-Dashboard - ohne Admin-Rechte"
+        [System.Windows.Forms.MessageBox]::Show($Text, $Titel,
+            [System.Windows.Forms.MessageBoxButtons]::OK,
+            [System.Windows.Forms.MessageBoxIcon]::Warning) | Out-Null
+    }
+    catch { }
+}
 # Region: Verschiebeanforderungen (WebGUI) - v2.2
 # ============================================================================
 
@@ -5512,6 +5623,47 @@ try {
     if ($BatchName) { Write-Log -Nachricht "Batch-Filter aktiv: $BatchName" -Typ "INFO" }
     if ($Light) {
         Write-Log -Nachricht "Light-Modus aktiv (-Light): es werden nur Statusdaten geliefert - Get-MoveRequestStatistics bleibt aus, technische Spalten sind im Dashboard ausgeblendet." -Typ "INFO"
+    }
+
+    # --- Erhoehte Rechte? Selber mit RunAs neu starten (v2.14) --------------
+    # System- und Arbitration-Postfaecher brauchen das erhoehte Token: ohne
+    # UAC bleiben privilegierte Gruppen im Token auf "deny-only", und der
+    # Mailbox Replication Service antwortet auf jeden Versuch mit "Der
+    # Zugriff wurde verweigert". Deshalb startet das Skript sich ohne
+    # Admin-Rechte einmal mit UAC elevated neu - alle uebergebenen Parameter
+    # gehen mit. Lehnt der Nutzer die UAC-Frage ab, laeuft es ohne
+    # Erhoehung weiter: Warnung im Log plus Hinweisdialog.
+    if (-not (Test-IstAdministrator)) {
+        if ([string]::IsNullOrWhiteSpace($PSCommandPath)) {
+            Write-Log -Nachricht "Ohne Admin-Rechte und ohne Skriptpfad (Start ueber eine Pipe?) - Weiterlauf ohne Erhoehung." -Typ "WARNUNG"
+        }
+        else {
+            $ElevationsArgumente = New-ElevationsArgumente -SkriptPfad $PSCommandPath -GebundeneParameter $PSBoundParameters
+            try {
+                Start-Process -FilePath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" `
+                              -Verb RunAs `
+                              -ArgumentList $ElevationsArgumente `
+                              -ErrorAction Stop
+                Write-Log -Nachricht "Ohne Admin-Rechte gestartet - Neustart als Administrator eingeleitet (UAC-Frage). Das Ausgangsfenster schliesst sich, der erhoehte Neustart uebernimmt." -Typ "INFO"
+                exit 0
+            }
+            catch {
+                $Abbruch = $false
+                if ($_.Exception -is [System.ComponentModel.Win32Exception] -and $_.Exception.NativeErrorCode -eq 1223) {
+                    $Abbruch = $true
+                }
+                elseif ($_.Exception.InnerException -is [System.ComponentModel.Win32Exception] -and $_.Exception.InnerException.NativeErrorCode -eq 1223) {
+                    $Abbruch = $true
+                }
+                if ($Abbruch) {
+                    Write-Log -Nachricht "Erhoehung abgelehnt (UAC) - das Skript laeuft NICHT als Administrator. System-/Arbitration-Postfaecher scheitern dann mit 'Der Zugriff wurde verweigert'." -Typ "WARNUNG"
+                    Show-ElevationsHinweis
+                }
+                else {
+                    Write-Log -Nachricht "Erhoehung fehlgeschlagen: $($_.Exception.Message) - Weiterlauf ohne Admin-Rechte." -Typ "WARNUNG"
+                }
+            }
+        }
     }
 
     # --- Laeuft schon eine Instanz auf diesem Port? -------------------------
