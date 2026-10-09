@@ -2,7 +2,7 @@
 
 [![GitLab-Projekt](https://img.shields.io/badge/GitLab-Projekt-FC6D26?logo=gitlab&logoColor=white)](https://gitlab.com/RoccoAmmon/Exchange-MoveRequest-Dashboard)
 [![Lizenz: MIT](https://img.shields.io/badge/Lizenz-MIT-4c1?logo=opensourceinitiative&logoColor=white)](LICENSE)
-[![Version 2.9](https://img.shields.io/badge/Version-2.9-007ec6)](CHANGELOG.md)
+[![Version 2.10](https://img.shields.io/badge/Version-2.10-007ec6)](CHANGELOG.md)
 [![Letzter Commit](https://img.shields.io/gitlab/last-commit/RoccoAmmon/Exchange-MoveRequest-Dashboard)](https://gitlab.com/RoccoAmmon/Exchange-MoveRequest-Dashboard/-/commits/main)
 [![Status: stabil](https://img.shields.io/badge/Status-stabil-brightgreen)](https://gitlab.com/RoccoAmmon/Exchange-MoveRequest-Dashboard/-/wikis/Architektur)
 [![Sprache: Deutsch](https://img.shields.io/badge/Sprache-Deutsch-005BBB?logoColor=white)](https://gitlab.com/RoccoAmmon/Exchange-MoveRequest-Dashboard/-/wikis/home)
@@ -28,6 +28,7 @@ Verschiebeanforderungen lassen sich direkt aus der Web-GUI starten, fortsetzen u
 | **Live-Statistik** | Tabelle aller MoveRequests, aktualisiert per AJAX alle X Sekunden – **ohne** Seiten-Reload |
 | **Aktive Jobs zuerst** | `InProgress`, `CompletionInProgress` und `Queued` stehen immer oben, abgeschlossene/fehlgeschlagene darunter |
 | **Neue Verschiebung** | Postfächer einer Quell-Datenbank auswählen, Quelle/Ziel wählen, mit `New-MoveRequest` starten (eigener Hintergrund-Job, GUI bleibt bedienbar) |
+| **Sonderpostfächer** | Eigenes Auswahlfeld **Postfachart**: *Benutzerpostfächer* / *Sonderpostfächer* / *Alle*. Zu den Sonderpostfächern zählen **Arbitration, AuditLog, AuxAuditLog, öffentliche Postfächer, Archiv**, SystemMailbox, Migration und Discovery – diese waren vorher komplett ausgefiltert und lassen sich nun getrennt anzeigen, auswählen und verschieben (Health-/Monitoring-Postfächer bleiben verborgen). Jeder Eintrag trägt seine Art als Markierung, postfächer ohne eigene SMTP-Adresse werden über Alias bzw. DN identifiziert |
 | **Suspendierte fortsetzen** | Button **„Abschließen"** direkt hinter jeder suspendierten Tabellenzeile (einzelne Anforderung), **Mehrfachauswahl** mit Häkchen + „Auswahl abschließen" (ein Auftrag für die ganze Auswahl), zusätzlich pro Batch und global: `Resume-MoveRequest` als Hintergrund-Job, Fortschritt über `/api/move-status` |
 | **Abgeschlossene löschen** | Pro Auftrag und global: `Remove-MoveRequest` – räumt nur die MoveRequests auf, die Postfächer bleiben unberührt |
 | **Vorabtest** | `New-MoveRequest -WhatIf` vor dem eigentlichen Start (aus / erst prüfen dann verschieben / nur prüfen) |
@@ -99,7 +100,7 @@ Dashboard beenden: Schalter **„Server stoppen"** in der GUI oder `GET http://l
 | `/` | GET | Liefert die HTML-Dashboard-Seite (einmalig laden) |
 | `/api/data` | GET | Aktuelle MoveRequest-Daten als JSON (gepollt) |
 | `/api/databases` | GET | Alle Postfachdatenbanken (Quell-/Ziel-Auswahl) |
-| `/api/benutzer` | GET | Postfächer (`?quelle=NAME`; ohne Parameter alle Postfächer aller Datenbanken) |
+| `/api/benutzer` | GET | Postfächer (`?quelle=NAME`, `?typ=` mit `benutzer` / `sonder` / `alle` für die Postfachart; ohne Parameter alle Benutzerpostfächer aller Datenbanken) |
 | `/api/move` | POST | Erstellt Verschiebeanforderungen (JSON: Quelle, Ziel, Benutzer, Suspend, Prioritaet, Vorabtest, BadItemLimit) |
 | `/api/move-status` | GET | Status und Ergebnisse gestarteter Verschiebeaufträge |
 | `/api/move-aktion` | POST | Suspendierte fortsetzen oder abgeschlossene löschen (JSON: Aktion, BatchName, Alle, Identity bzw. Identities) |
@@ -195,6 +196,7 @@ Alle Änderungen siehe [CHANGELOG.md](CHANGELOG.md).
 
 | Version | Schwerpunkt |
 |---|---|
+| 2.10 | Sonderpostfächer (Arbitration, AuditLog, AuxAuditLog, öffentliche Postfächer, Archiv) separat anzeigen, auswählen und verschieben |
 | 2.9 | Beim Stoppen über die Seite keine Fehlwarnung mehr – Browser-Abbruch gilt nicht als Listener-Fehler |
 | 2.8 | Fehler 32 behoben (Prüfung direkt vor `$Listener.Start()` + ein Nachlegen), Light-Modus `-Light` |
 | 2.7 | Mehrfachauswahl suspendierter Anforderungen – auswählen und mit einem Klick abschließen (`Identities`) |

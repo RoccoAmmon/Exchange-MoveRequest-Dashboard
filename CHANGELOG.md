@@ -3,6 +3,41 @@
 Alle bemerkenswerten Änderungen an **Exchange-MoveRequest-Dashboard**.
 Die Versionierung folgt `MAJOR.MINOR` – das Skript führt die Versionsnummer in `.NOTES`.
 
+## [2.10] – 09.10.2026
+
+### Neu
+- **Sonderpostfächer lassen sich separat anzeigen, auswählen und verschieben.**
+  Über das neue Auswahlfeld **Postfachart** neben dem Postfachfilter:
+  *Benutzerpostfächer* (bisheriges Verhalten), *Sonderpostfächer* oder *Alle*.
+  Zu den Sonderpostfächern zählen **Arbitration, AuditLog, AuxAuditLog,
+  öffentliche Postfächer (`PublicFolder`) und Archiv** sowie SystemMailbox,
+  Migration und Discovery – vorher wurden sie sämtlich ausgefiltert und waren
+  über die GUI gar nicht erreichbar. Health-/Monitoring-Postfächer bleiben
+  weiterhin verborgen.
+- Jede Listenzeile trägt die Postfachart als Markierung (`.typ-tag`), der
+  Textfilter berücksichtigt die Art ebenfalls (z. B. `arbitration` oder
+  `publicfolder`). Die Hinweiszeile nennt die gerade geladene Postfachart.
+
+### Geändert
+- **Auswahl-Schluessel.** Jedes Postfach liefert zusätzlich das Feld
+  `Schluessel` (zuerst SMTP-Adresse, dann Alias, Anzeigename, DN).
+  Sonderpostfächer haben oft keine eigene SMTP-Adresse – ohne Rückfall wäre
+  der Auswahlwert leer gewesen und alle betroffenen Postfächer gehörten zu
+  **einem** Häkchen, verschoben worden wäre nur eines. `New-MoveRequest
+  -Identity` akzeptiert alle vier Formen.
+- `/api/benutzer` akzeptiert `?typ=` mit `benutzer` / `sonder` / `alle`
+  (unbekannte Werte fallen auf `benutzer` zurück) und liefert je Postfach
+  zusätzlich `Typ` und `Schluessel`.
+
+### Getestet
+- 64 neue Prüfungen. `test_sonderpostfaecher.ps1` (42): Klassifizierung aus
+  `RecipientTypeDetails` inkl. `AuxAuditLog`-Gegenprobe (darf nicht als
+  `AuditLog` landen), alle drei Filterstufen, Quell-Datenbank-Filter,
+  Schlüssel-Rückfall ohne SMTP, laufende MoveRequests, `ValidateSet` und der
+  leere Fall (`[]` statt `null` in der API). `test_postfachart.js` (22):
+  URL-Bau inkl. URL-Codierung, Schlüssel-Rückfall, Anzeigetext und der
+  Postfachfilter.
+
 ## [2.9] – 09.10.2026
 
 ### Behoben
