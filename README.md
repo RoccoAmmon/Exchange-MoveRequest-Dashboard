@@ -2,7 +2,7 @@
 
 [![GitLab-Projekt](https://img.shields.io/badge/GitLab-Projekt-FC6D26?logo=gitlab&logoColor=white)](https://gitlab.com/RoccoAmmon/Exchange-MoveRequest-Dashboard)
 [![Lizenz: MIT](https://img.shields.io/badge/Lizenz-MIT-4c1?logo=opensourceinitiative&logoColor=white)](LICENSE)
-[![Version 2.13](https://img.shields.io/badge/Version-2.13-007ec6)](CHANGELOG.md)
+[![Version 2.14](https://img.shields.io/badge/Version-2.14-007ec6)](CHANGELOG.md)
 [![Letzter Commit](https://img.shields.io/gitlab/last-commit/RoccoAmmon/Exchange-MoveRequest-Dashboard)](https://gitlab.com/RoccoAmmon/Exchange-MoveRequest-Dashboard/-/commits/main)
 [![Status: stabil](https://img.shields.io/badge/Status-stabil-brightgreen)](https://gitlab.com/RoccoAmmon/Exchange-MoveRequest-Dashboard/-/wikis/Architektur)
 [![Sprache: Deutsch](https://img.shields.io/badge/Sprache-Deutsch-005BBB?logoColor=white)](https://gitlab.com/RoccoAmmon/Exchange-MoveRequest-Dashboard/-/wikis/home)
@@ -42,7 +42,7 @@ Verschiebeanforderungen lassen sich direkt aus der Web-GUI starten, fortsetzen u
 
 - **Exchange Server 2019 On-Premises** (Management-Tools / Exchange Management Shell verfügbar)
 - **Windows PowerShell 5.1** (skriptiert aus der Exchange Management Shell)
-- Ausführung **als Administrator** – `System.Net.HttpListener` benötigt HTTP-Reservierungsrechte
+- Ausführung **als Administrator** – `System.Net.HttpListener` benötigt HTTP-Reservierungsrechte; startet das Skript ohne Admin-Rechte, hebt es sich selbst per UAC an (seit v2.14)
 - Netzwerkzugriff auf den Exchange-Server (Localhost reicht, wenn das Skript auf dem Exchange läuft)
 
 ## Schnellstart
@@ -196,6 +196,7 @@ Alle Änderungen siehe [CHANGELOG.md](CHANGELOG.md).
 
 | Version | Schwerpunkt |
 |---|---|
+| 2.14 | **Selbst-Elevation**: ohne Admin-Rechte startet das Skript sich automatisch mit UAC elevated neu (alle Parameter bleiben erhalten); bei Ablehnung Log-Warnung und Hinweisdialog |
 | 2.13 | Fehlgeschlagene Verschiebungen nennen Ausführungskontext (Konto, Administrator-Status, PowerShell), Exception-Details und einen Handlungshinweis („Zugriff wurde verweigert") |
 | 2.12 | System-/Arbitration-Postfächer über eigene `Get-Mailbox`-Schalter abrufen (vorher in der Sonderliste ausgeblendet) – dazu die Ansicht „Postfächer mit Archiv" |
 | 2.11 | Versionsnummer in der Web-Oberfläche (Marke im Kopf, Seitentitel, Fußzeile) – aus dem `.NOTES`-Block gelesen |

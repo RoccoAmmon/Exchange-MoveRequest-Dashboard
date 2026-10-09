@@ -3,6 +3,30 @@
 Alle bemerkenswerten Änderungen an **Exchange-MoveRequest-Dashboard**.
 Die Versionierung folgt `MAJOR.MINOR` – das Skript führt die Versionsnummer in `.NOTES`.
 
+## [2.14] – 09.10.2026
+
+### Hinzugefügt
+- **Selbst-Elevation** – die Ursache von „Der Zugriff wurde verweigert"
+  bei System-/Arbitration-Postfächern ist geklärt (v2.13 diagnostiziert
+  es): ohne UAC bleiben privilegierte Gruppen im Token auf *deny-only*,
+  das erhöhte Token fehlt. Startet das Dashboard ohne Administrator-
+  Rechte, startet es sich jetzt selbst per `Start-Process -Verb RunAs`
+  mit UAC elevated neu:
+  - alle übergebenen Parameter gehen an den Neustart mit
+    (`New-ElevationsArgumente`; ausdrücklich abgeschaltete Schalter
+    entsprechen dem Default und werden nicht weitergegeben – so
+    verhält sich `powershell.exe -File` vorhersehbar),
+  - das Ausgangsfenster schliesst sich, der elevated Neustart übernimmt,
+  - **lehnt der Nutzer die UAC-Frage ab**, läuft das Skript ohne
+    Erhebung weiter: WARNUNG im Log plus Hinweisdialog – System- und
+    Arbitration-Postfächer scheitern dann weiterhin,
+  - ohne lesbaren Skriptpfad (Start über eine Pipe) wird nicht
+    umgestartet.
+
+### Geändert
+- Der `.NOTES`-Hinweis beschreibt jetzt die Selbst-Elevation statt der
+  bloßen Aufforderung, manuell als Administrator zu starten.
+
 ## [2.13] – 09.10.2026
 
 ### Geändert
