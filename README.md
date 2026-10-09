@@ -2,7 +2,7 @@
 
 [![GitLab-Projekt](https://img.shields.io/badge/GitLab-Projekt-FC6D26?logo=gitlab&logoColor=white)](https://gitlab.com/RoccoAmmon/Exchange-MoveRequest-Dashboard)
 [![Lizenz: MIT](https://img.shields.io/badge/Lizenz-MIT-4c1?logo=opensourceinitiative&logoColor=white)](LICENSE)
-[![Version 2.8](https://img.shields.io/badge/Version-2.8-007ec6)](CHANGELOG.md)
+[![Version 2.9](https://img.shields.io/badge/Version-2.9-007ec6)](CHANGELOG.md)
 [![Letzter Commit](https://img.shields.io/gitlab/last-commit/RoccoAmmon/Exchange-MoveRequest-Dashboard)](https://gitlab.com/RoccoAmmon/Exchange-MoveRequest-Dashboard/-/commits/main)
 [![Status: stabil](https://img.shields.io/badge/Status-stabil-brightgreen)](https://gitlab.com/RoccoAmmon/Exchange-MoveRequest-Dashboard/-/wikis/Architektur)
 [![Sprache: Deutsch](https://img.shields.io/badge/Sprache-Deutsch-005BBB?logoColor=white)](https://gitlab.com/RoccoAmmon/Exchange-MoveRequest-Dashboard/-/wikis/home)
@@ -175,6 +175,14 @@ Fenster konnte sich eine zweite Instanz das URL-Praefix schnappen, worauf der St
 scheiterte. Schlägt der Start trotzdem mit einem Präfix-Konflikt fehl, wird **einmal nachgelegt**
 (höchstens 3 Versuche, ohne `Ping-Pong` zwischen zwei Instanzen).
 
+**Warnung „HTTP-Listener Fehler … Netzwerkname ist nicht mehr verfügbar" beim Stoppen**
+Kein Fehler: Der Klick auf **„Server stoppen"** bricht die gerade laufende Browser-Anfrage ab,
+während das Skript in deren Response-Stream schreibt – der Server fährt trotzdem sauber herunter
+(`Server-Stop angefordert` → `HTTP-Server sauber heruntergefahren`). Seit **v2.9** erkennt das
+Skript solche Client-Abbrüche und schreibt stattdessen eine harmlose `[STILL]`-Zeile mit
+verständlichem Text – nur in die Datei, nicht auf die Konsole. Echte Listener-Fehler (etwa
+„Zugriff verweigert") bleiben eine WARNUNG.
+
 **Dashboard lädt, aber die Tabelle bleibt leer**
 Prüfen, ob überhaupt MoveRequests existieren (`Get-MoveRequest`) und ob der Exchange-Management-Zugriff
 aus der Shell funktioniert. Fehlermeldungen stehen im Log unter `C:\ExchangeMigrationLog`.
@@ -187,6 +195,7 @@ Alle Änderungen siehe [CHANGELOG.md](CHANGELOG.md).
 
 | Version | Schwerpunkt |
 |---|---|
+| 2.9 | Beim Stoppen über die Seite keine Fehlwarnung mehr – Browser-Abbruch gilt nicht als Listener-Fehler |
 | 2.8 | Fehler 32 behoben (Prüfung direkt vor `$Listener.Start()` + ein Nachlegen), Light-Modus `-Light` |
 | 2.7 | Mehrfachauswahl suspendierter Anforderungen – auswählen und mit einem Klick abschließen (`Identities`) |
 | 2.6 | Zweite Instanz auf demselben Port wird beim Start automatisch beendet (Fehler 32 vorab), `-KeinAutoStopp` |

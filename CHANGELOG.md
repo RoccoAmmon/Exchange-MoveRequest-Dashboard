@@ -3,6 +3,38 @@
 Alle bemerkenswerten Änderungen an **Exchange-MoveRequest-Dashboard**.
 Die Versionierung folgt `MAJOR.MINOR` – das Skript führt die Versionsnummer in `.NOTES`.
 
+## [2.9] – 09.10.2026
+
+### Behoben
+- **Fehlwarnung beim Stoppen über die Seite.** Der Klick auf „Server stoppen" bricht die gerade
+  laufende Browser-Anfrage ab, während das Skript in deren Response-Stream schreibt. Das ergab:
+
+  ```text
+  [WARNUNG] HTTP-Listener Fehler: Ausnahme beim Aufrufen von "Write" mit 3 Argument(en): "Der angegebene Netzwerkname ist nicht mehr verfügbar"
+  [WARNUNG] Server-Stop angefordert.
+  [INFO] HTTP-Server sauber heruntergefahren.
+  ```
+
+  Der Stopp selbst funktioniert einwandfrei – die Warnung war also rein kosmetisch, wirkte aber
+  wie ein Fehler.
+- Neue Funktion **`Test-BrowserVerbindungsabbruch`** erkennt Client-Abbrüche an der
+  Exception-Kette (PowerShell liefert die `HttpListenerException` als Wrapper mit
+  `InnerException`) an den Win32-Codes 64, 995, 1225, 1236, 10053, 10054 und 10058 bzw. am
+  Meldungstext. Solche Fälle werden als `STILL` protokolliert – nur in die Datei, nicht auf die
+  Konsole:
+
+  ```text
+  [STILL] Verbindung vom Browser geschlossen - Anfrage abgebrochen (beim Stoppen oder Schliessen des Tabs ganz normal).
+  ```
+
+  Echte Listener-Fehler bleiben eine WARNUNG, etwa „Zugriff verweigert" (5) oder 10061.
+
+### Getestet
+- 17 neue Prüfungen (`test_stop_log.ps1`): der konkrete Praxisfall (Win32 64, auch als Wrapper
+  mit `InnerException` und als `MethodInvocationException`), weitere Abbruchcodes, nur der
+  Meldungstext – sowie die Gegenprobe, dass „Zugriff verweigert", 10061 und sonstige
+  Exceptionen weiterhin als Fehler erkannt werden.
+
 ## [2.8] – 08.10.2026
 
 ### Behoben
