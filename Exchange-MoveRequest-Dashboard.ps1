@@ -3655,7 +3655,7 @@ $LightCSS
                     <select id="postfachTyp" onchange="benutzerLaden()"
                             title="Sonderpostfaecher werden in der Normalansicht bewusst nicht angezeigt">
                         <option value="benutzer" selected>Benutzerpostfächer</option>
-                        <option value="sonder">Sonderpostfächer (Arbitration, AuditLog, PublicFolder, Archiv)</option>
+                        <option value="sonder">Sonderpostfächer (Arbitration, AuditLog, AuxAuditLog, PublicFolder, Archiv)</option>
                         <option value="alle">Alle (Benutzer- und Sonderpostfächer)</option>
                     </select>
                 </div>
