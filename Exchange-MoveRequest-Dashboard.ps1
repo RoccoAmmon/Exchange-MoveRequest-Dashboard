@@ -65,10 +65,10 @@
     Autor:          Rocco Ammon
     Erstelldatum:   26.02.2026
     Stand:          09.10.2026
-    Version:        2.12 (Sonderpostfaecher wirklich abfragen: die
-                            Schalter -Arbitration, -AuditLog, -AuxAuditLog,
-                            -Migration, -PublicFolder und -Archive; dazu
-                            Ansicht "Postfaecher mit Archiv")
+    Version:        2.13 (Fehlerdiagnose: fehlgeschlagene Verschiebungen
+                            erklaeren sich selbst - Ausfuehrungskontext,
+                            technische Details und Handlungshinweis bei
+                            "Zugriff wurde verweigert")
     Voraussetzung:  Exchange Server 2019 On-Premises
     Log-Pfad:       C:\ExchangeMigrationLog
     HINWEIS:        Muss als Administrator ausgeführt werden (HttpListener benötigt dies)
@@ -317,6 +317,21 @@
                                   (SystemMailbox{...}, FederatedEmail.,
                                   Migration., HealthMailbox) fuer Postfaecher
                                   ohne brauchbaren RecipientTypeDetails-Wert.
+                            - v2.13 Neu: Jede fehlgeschlagene Verschiebung
+                                  erklaert sich jetzt selbst: die Meldung
+                                  enthaelt den Ausfuehrungskontext des
+                                  Hintergrund-Jobs (Benutzer, Administrator
+                                  ja/nein, PowerShell-Version und -Bitness),
+                                  Exception-Typ, InnerException und
+                                  FullyQualifiedErrorId. Bei "Der Zugriff
+                                  wurde verweigert" (der Mailbox Replication
+                                  Service lehnt den Aufruf ab) kommt ein
+                                  Handlungshinweis mit dem manuellen
+                                  EMS-Vergleichstest. Beim Skriptstart wird
+                                  der eigene Ausfuehrungskontext ins Log
+                                  geschrieben - so ist nachvollziehbar, in
+                                  welchem Konto Dashboard und Verschiebe-Job
+                                  laufen.
 
     BEI ENVELOPE-FEHLERN (Get-MoveRequestStatistics):
         In einer Exchange Management Shell ausführen und Skript neu starten:
@@ -2037,14 +2052,77 @@ function Start-Verschiebeauftrag {
             [string]$Vorabtest,
             [int]$BadItemLimit
         )
+        # Fehler verstehen machen (v2.13): der Hintergrund-Job laeuft in
+        # einer frischen PowerShell - ohne Ausfuehrungskontext und
+        # technische Details war unklar, warum der Mailbox Replication
+        # Service "Der Zugriff wurde verweigert" gab, waehrend derselbe
+        # Befehl in der Exchange Management Shell lief. Die Funktion steht
+        # HIER im Skriptblock: Start-Job kennt weder Variablen noch
+        # Funktionen des Hauptskripts - deshalb steht derselbe Code in
+        # beiden Job-Bloecken.
+        function Baue-FehlerText {
+            param(
+                [System.Management.Automation.ErrorRecord]$Fehler,
 
+                [Parameter(Mandatory = $false)]
+                [AllowEmptyString()]
+                [string]$ZielDb = ""
+            )
+
+            $Text = [string]$Fehler.Exception.Message
+
+            # Ziel-DB-Problem aus der Praxis: der MRS kommt nicht an den
+            # Store der Ziel-Datenbank.
+            if (-not [string]::IsNullOrWhiteSpace($ZielDb) -and
+                $Text -match 'NoSupport|Unable to open message store|Fehler beim Kommunizieren mit der Postfachdatenbank') {
+                $Text += " || Hinweis: Der Store der Ziel-Datenbank $ZielDb konnte nicht geoeffnet werden. " +
+                         "Pruefen: ist die DB gemountet und besitzt sie eine Systemmailbox? " +
+                         "(Get-MailboxDatabase -Identity $ZielDb -Status | Select Name,Mounted,Status)"
+            }
+
+            # Der MRS hat die Identitaet aufgeloest UND den Aufruf danach
+            # abgelehnt: Rechte-/Kontextproblem, kein technischer Fehler.
+            if ($Text -match 'Zugriff wurde verweigert|Access is denied|Access denied|UnauthorizedAccess') {
+                $Text += " || Hinweis: Der Mailbox Replication Service hat den Aufruf abgelehnt - " +
+                         "ein Rechte- oder Kontextproblem, kein technischer Fehler. Vergleichstest: " +
+                         "denselben Befehl manuell in der Exchange Management Shell ausfuehren. " +
+                         "Geht er dort, liegt es am Startkontext des Dashboards (ggf. als " +
+                         "Administrator starten) - den mitgelieferten Kontext unten auswerten."
+            }
+
+            # Technische Details: der Exception-Typ sagt mehr als der
+            # Klartext - und kam bisher in der Meldung gar nicht vor.
+            $Text += " || Technisch: " + [string]$Fehler.Exception.GetType().FullName
+            if ($Fehler.Exception.InnerException) {
+                $Text += " | Inner: " + [string]$Fehler.Exception.InnerException.Message
+            }
+            if (-not [string]::IsNullOrWhiteSpace([string]$Fehler.FullyQualifiedErrorId)) {
+                $Text += " | FQID: " + [string]$Fehler.FullyQualifiedErrorId
+            }
+
+            # Welches Konto laeuft IM JOB? Start-Job ist ein Kindprozess
+            # des Dashboards mit demselben Token - steht dieser Kontext hier
+            # drin, ist die Vermutung, der Job laeuft in einem anderen
+            # Konto, ausgeschlossen.
+            try {
+                $Ident = [System.Security.Principal.WindowsIdentity]::GetCurrent()
+                $IstAdmin = (New-Object System.Security.Principal.WindowsPrincipal($Ident)).IsInRole([System.Security.Principal.WindowsBuiltInRole]::Administrator)
+                $Bitness  = if ([Environment]::Is64BitProcess) { '64-Bit' } else { '32-Bit' }
+                $Text += " || Kontext: " + [string]$Ident.Name +
+                         " | Administrator: " + $IstAdmin +
+                         " | PowerShell " + [string]$PSVersionTable.PSVersion + " ($Bitness)"
+            }
+            catch { }
+
+            return $Text
+        }
         try {
             if (-not (Get-PSSnapin -Name Microsoft.Exchange.Management.PowerShell.SnapIn -ErrorAction SilentlyContinue)) {
                 Add-PSSnapin Microsoft.Exchange.Management.PowerShell.SnapIn -ErrorAction Stop
             }
         }
         catch {
-            $Grund = "Exchange Snap-In konnte nicht geladen werden: " + $_.Exception.Message
+            $Grund = "Exchange Snap-In konnte nicht geladen werden: " + (Baue-FehlerText -Fehler $_)
             foreach ($Adresse in $Adressen) {
                 [pscustomobject]@{ Benutzer = $Adresse; Ok = $false; Meldung = $Grund }
             }
@@ -2108,14 +2186,10 @@ function Start-Verschiebeauftrag {
                     }
                 }
                 catch {
-                    $Meldung      = "WhatIf-Pruefung fehlgeschlagen: " + $_.Exception.Message
+                    # Technik/Kontext/Store-Hinweis baut die Funktion - mit
+                    # demselben Text wie im echten Lauf, nur mit Prefix.
+                    $Meldung      = "WhatIf-Pruefung fehlgeschlagen: " + (Baue-FehlerText -Fehler $_ -ZielDb $ZielDatenbank)
                     $Weitermachen = $false
-
-                    if ($Meldung -match 'NoSupport|Unable to open message store|Fehler beim Kommunizieren mit der Postfachdatenbank') {
-                        $Meldung += " || Hinweis: Der Store der Ziel-Datenbank $ZielDatenbank konnte nicht geoeffnet werden. " +
-                                    "Pruefen: ist die DB gemountet und besitzt sie eine Systemmailbox? " +
-                                    "(Get-MailboxDatabase -Identity $ZielDatenbank -Status | Select Name,Mounted,Status)"
-                    }
                 }
             }
 
@@ -2139,15 +2213,7 @@ function Start-Verschiebeauftrag {
                     }
                 }
                 catch {
-                    $Meldung = $_.Exception.Message
-
-                    # Den haeufigsten Fehler aus der Praxis verstaendlich machen:
-                    # MRS kommt nicht an den Store der Ziel-Datenbank.
-                    if ($Meldung -match 'NoSupport|Unable to open message store|Fehler beim Kommunizieren mit der Postfachdatenbank') {
-                        $Meldung += " || Hinweis: Der Store der Ziel-Datenbank $ZielDatenbank konnte nicht geoeffnet werden. " +
-                                    "Pruefen: ist die DB gemountet und besitzt sie eine Systemmailbox? " +
-                                    "(Get-MailboxDatabase -Identity $ZielDatenbank -Status | Select Name,Mounted,Status)"
-                    }
+                    $Meldung = Baue-FehlerText -Fehler $_ -ZielDb $ZielDatenbank
                 }
             }
 
@@ -2537,14 +2603,77 @@ function Start-MoveAktion {
             [array]$Eintraege,
             [string]$Aktion
         )
+        # Fehler verstehen machen (v2.13): der Hintergrund-Job laeuft in
+        # einer frischen PowerShell - ohne Ausfuehrungskontext und
+        # technische Details war unklar, warum der Mailbox Replication
+        # Service "Der Zugriff wurde verweigert" gab, waehrend derselbe
+        # Befehl in der Exchange Management Shell lief. Die Funktion steht
+        # HIER im Skriptblock: Start-Job kennt weder Variablen noch
+        # Funktionen des Hauptskripts - deshalb steht derselbe Code in
+        # beiden Job-Bloecken.
+        function Baue-FehlerText {
+            param(
+                [System.Management.Automation.ErrorRecord]$Fehler,
 
+                [Parameter(Mandatory = $false)]
+                [AllowEmptyString()]
+                [string]$ZielDb = ""
+            )
+
+            $Text = [string]$Fehler.Exception.Message
+
+            # Ziel-DB-Problem aus der Praxis: der MRS kommt nicht an den
+            # Store der Ziel-Datenbank.
+            if (-not [string]::IsNullOrWhiteSpace($ZielDb) -and
+                $Text -match 'NoSupport|Unable to open message store|Fehler beim Kommunizieren mit der Postfachdatenbank') {
+                $Text += " || Hinweis: Der Store der Ziel-Datenbank $ZielDb konnte nicht geoeffnet werden. " +
+                         "Pruefen: ist die DB gemountet und besitzt sie eine Systemmailbox? " +
+                         "(Get-MailboxDatabase -Identity $ZielDb -Status | Select Name,Mounted,Status)"
+            }
+
+            # Der MRS hat die Identitaet aufgeloest UND den Aufruf danach
+            # abgelehnt: Rechte-/Kontextproblem, kein technischer Fehler.
+            if ($Text -match 'Zugriff wurde verweigert|Access is denied|Access denied|UnauthorizedAccess') {
+                $Text += " || Hinweis: Der Mailbox Replication Service hat den Aufruf abgelehnt - " +
+                         "ein Rechte- oder Kontextproblem, kein technischer Fehler. Vergleichstest: " +
+                         "denselben Befehl manuell in der Exchange Management Shell ausfuehren. " +
+                         "Geht er dort, liegt es am Startkontext des Dashboards (ggf. als " +
+                         "Administrator starten) - den mitgelieferten Kontext unten auswerten."
+            }
+
+            # Technische Details: der Exception-Typ sagt mehr als der
+            # Klartext - und kam bisher in der Meldung gar nicht vor.
+            $Text += " || Technisch: " + [string]$Fehler.Exception.GetType().FullName
+            if ($Fehler.Exception.InnerException) {
+                $Text += " | Inner: " + [string]$Fehler.Exception.InnerException.Message
+            }
+            if (-not [string]::IsNullOrWhiteSpace([string]$Fehler.FullyQualifiedErrorId)) {
+                $Text += " | FQID: " + [string]$Fehler.FullyQualifiedErrorId
+            }
+
+            # Welches Konto laeuft IM JOB? Start-Job ist ein Kindprozess
+            # des Dashboards mit demselben Token - steht dieser Kontext hier
+            # drin, ist die Vermutung, der Job laeuft in einem anderen
+            # Konto, ausgeschlossen.
+            try {
+                $Ident = [System.Security.Principal.WindowsIdentity]::GetCurrent()
+                $IstAdmin = (New-Object System.Security.Principal.WindowsPrincipal($Ident)).IsInRole([System.Security.Principal.WindowsBuiltInRole]::Administrator)
+                $Bitness  = if ([Environment]::Is64BitProcess) { '64-Bit' } else { '32-Bit' }
+                $Text += " || Kontext: " + [string]$Ident.Name +
+                         " | Administrator: " + $IstAdmin +
+                         " | PowerShell " + [string]$PSVersionTable.PSVersion + " ($Bitness)"
+            }
+            catch { }
+
+            return $Text
+        }
         try {
             if (-not (Get-PSSnapin -Name Microsoft.Exchange.Management.PowerShell.SnapIn -ErrorAction SilentlyContinue)) {
                 Add-PSSnapin Microsoft.Exchange.Management.PowerShell.SnapIn -ErrorAction Stop
             }
         }
         catch {
-            $Grund = "Exchange Snap-In konnte nicht geladen werden: " + $_.Exception.Message
+            $Grund = "Exchange Snap-In konnte nicht geladen werden: " + (Baue-FehlerText -Fehler $_)
             foreach ($Eintrag in $Eintraege) {
                 [pscustomobject]@{ Benutzer = $Eintrag.Anzeige; Ok = $false; Meldung = $Grund }
             }
@@ -2570,7 +2699,7 @@ function Start-MoveAktion {
                 }
             }
             catch {
-                $Meldung = $_.Exception.Message
+                $Meldung = Baue-FehlerText -Fehler $_
             }
 
             [pscustomobject]@{ Benutzer = $Eintrag.Anzeige; Ok = $Ok; Meldung = $Meldung }
@@ -5408,6 +5537,20 @@ try {
     if ($PortZustand -eq "OhneStopp") {
         Write-Log -Nachricht "Der Start wird voraussichtlich mit Fehler 32 scheitern - siehe Fehlerbehebung im Wiki." -Typ "WARNUNG"
     }
+
+    # --- Ausfuehrungskontext ins Log (v2.13) ------------------------------
+    # Bei Fehlern wie "Der Zugriff wurde verweigert" aus dem Verschiebe-Job
+    # muss nachvollziehbar sein, in welchem Konto das Dashboard laeuft:
+    # Start-Job startet einen Kindprozess mit demselben Token, der Job
+    # laeuft also IMMER in diesem Kontext. Ein Unterschied zur manuellen
+    # EMS war ohne diese Angabe nicht sichtbar.
+    try {
+        $KontextIdent   = [System.Security.Principal.WindowsIdentity]::GetCurrent()
+        $KontextAdmin   = (New-Object System.Security.Principal.WindowsPrincipal($KontextIdent)).IsInRole([System.Security.Principal.WindowsBuiltInRole]::Administrator)
+        $KontextBitness = if ([Environment]::Is64BitProcess) { '64-Bit' } else { '32-Bit' }
+        Write-Log -Nachricht "Ausfuehrungskontext: $($KontextIdent.Name), Administrator: $KontextAdmin, PowerShell $($PSVersionTable.PSVersion) ($KontextBitness)" -Typ "INFO"
+    }
+    catch { }
 
     # --- Exchange 2019 PowerShell Snap-in laden ---
     try {
