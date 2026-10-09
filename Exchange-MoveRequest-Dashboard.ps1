@@ -45,7 +45,10 @@
       /api/data        -> Liefert aktuelle MoveRequest-Daten als JSON (wird gepollt)
       /api/databases   -> Liefert alle Postfachdatenbanken (Quell-/Ziel-Auswahl)
       /api/benutzer    -> Liefert die Postfaecher (?quelle=NAME, ohne
-                          quelle = alle Postfaecher aller Datenbanken)
+                          quelle = alle Postfaecher aller Datenbanken;
+                          ?typ=benutzer|sonder|alle waehlt die Postfachart:
+                          Sonderpostfaecher = Arbitration, AuditLog,
+                          AuxAuditLog, PublicFolder, Archiv, ...)
       /api/move        -> Erstellt Verschiebeanforderungen (POST, JSON-Body
                           mit Quelle, Ziel, Benutzer, Suspend, Prioritaet,
                           Vorabtest und BadItemLimit)
@@ -60,9 +63,9 @@
     Autor:          Rocco Ammon
     Erstelldatum:   26.02.2026
     Stand:          09.10.2026
-    Version:        2.9 (Beim Stoppen ueber die Seite keine Fehlwarnung
-                            mehr - Verbindungsabbruch des Browsers gilt
-                            nicht mehr als Listener-Fehler)
+    Version:        2.10 (Sonderpostfaecher separat: Postfachart-Auswahl
+                            fuer Arbitration, AuditLog, AuxAuditLog,
+                            PublicFolder und Archiv)
     Voraussetzung:  Exchange Server 2019 On-Premises
     Log-Pfad:       C:\ExchangeMigrationLog
     HINWEIS:        Muss als Administrator ausgeführt werden (HttpListener benötigt dies)
@@ -271,6 +274,20 @@
                                   10053, 10054, 10058) ueber die Exception-Kette
                                   und protokolliert sie als STILL statt als
                                   WARNUNG - echte Listener-Fehler bleiben WARNUNG.
+                            - v2.10 Neu: Postfachart-Auswahl in der GUI
+                                  ("Benutzerpostfaecher" / "Sonderpostfaecher" /
+                                  "Alle") samt ?typ= in /api/benutzer. Die
+                                  Sonderpostfaecher (Arbitration, AuditLog,
+                                  AuxAuditLog, PublicFolder, Archiv, SystemMailbox,
+                                  Migration, Discovery) lassen sich dadurch
+                                  getrennt anzeigen, auswaehlen und verschieben -
+                                  vorher wurden sie vollstaendig ausgefiltert.
+                                  Health-Postfaecher bleiben verborgen. Neu dazu:
+                                  Funktion Get-PostfachTyp (Kategorie aus
+                                  RecipientTypeDetails) und je Postfach die
+                                  Felder "Typ" sowie "Schluessel" (SMTP, sonst
+                                  Alias, Anzeigename, DN) - Sonderpostfaecher
+                                  haben oft keine eigene Adresse.
 
     BEI ENVELOPE-FEHLERN (Get-MoveRequestStatistics):
         In einer Exchange Management Shell ausführen und Skript neu starten:
@@ -1477,6 +1494,50 @@ function Get-DatenbankAnzeige {
     return $Text
 }
 
+function Get-PostfachTyp {
+    <#
+    .SYNOPSIS
+        Ordnet einen RecipientTypeDetails-Wert einer Anzeigekategorie zu.
+
+        Zwei Kategorien: "Benutzer" fuer ganz normale Postfaecher und die
+        Sonderpostfaecher (Arbitration, AuditLog, AuxAuditLog, PublicFolder,
+        Archiv, SystemMailbox, Migration, Discovery). Health-Postfaecher
+        (Monitoring) bleiben wie bisher verborgen - Rueckgabe "".
+
+        Die Zuordnung geschieht ueber Teilbegriffe statt ueber feste Werte,
+        weil die Bezeichnungen zwischen Exchange-Versionen leicht
+        abweichen (ArbitrationMailbox, SystemMailbox{...}, PlusArchive, ...).
+
+    .PARAMETER RecipientTypeDetails
+        RecipientTypeDetails des Postfachs - darf und darf leer sein
+        (Sonderpostfaecher ohne Typ werden dann als Benutzer gefuehrt).
+    .OUTPUTS
+        String - "Benutzer", die Bezeichnung der Sonderart oder ""
+        (Postfach wird gar nicht angezeigt).
+    #>
+    param(
+        [Parameter(Mandatory = $false)]
+        [AllowEmptyString()]
+        [string]$RecipientTypeDetails = ""
+    )
+
+    if ([string]::IsNullOrWhiteSpace($RecipientTypeDetails)) { return "Benutzer" }
+
+    # Die Reihenfolge ist entscheidend: "AuxAuditLogMailbox" enthaelt
+    # ebenfalls "Audit" und muesste sonst fälschlich als AuditLog landen.
+    if ($RecipientTypeDetails -match 'AuxAudit')      { return "AuxAuditLog" }
+    if ($RecipientTypeDetails -match 'Audit')         { return "AuditLog" }
+    if ($RecipientTypeDetails -match 'Arbitration')   { return "Arbitration" }
+    if ($RecipientTypeDetails -match 'PublicFolder')  { return "PublicFolder" }
+    if ($RecipientTypeDetails -match 'Archive')       { return "Archiv" }
+    if ($RecipientTypeDetails -match 'SystemMailbox') { return "SystemMailbox" }
+    if ($RecipientTypeDetails -match 'Migration')     { return "Migration" }
+    if ($RecipientTypeDetails -match 'Discovery')     { return "Discovery" }
+    if ($RecipientTypeDetails -match 'Health')        { return "" }
+
+    return "Benutzer"
+}
+
 function Get-BenutzerListe {
     <#
     .SYNOPSIS
@@ -1489,24 +1550,33 @@ function Get-BenutzerListe {
         existiert. Solche Postfaecher werden in der Oberfläche deaktiviert
         angezeigt, damit nicht versehentlich doppelt verschoben wird.
 
-        Systempostfaecher (Arbitration, Health, Migration, ...) werden
-        ausgefiltert - fuer die Verschiebung sind sie ohnehin unbrauchbar.
+        Postfaecher lassen sich ueber -Typ trennen: Benutzerpostfaecher
+        (Standard), Sonderpostfaecher (Arbitration, AuditLog, AuxAuditLog,
+        PublicFolder, Archiv, ...) oder alles zusammen. Health-Postfaecher
+        werden in keiner Ansicht gezeigt.
 
     .PARAMETER QuellDatenbank
         Name der Postfachdatenbank, deren Postfaecher gelistet werden.
         Leer lassen zeigt ALLE Postfaecher aller Datenbanken an - mit
         Angabe der jeweiligen Datenbank pro Postfach.
+    .PARAMETER Typ
+        benutzer (Standard) = normale Postfaecher,
+        sonder   = nur die Sonderpostfaecher,
+        alle     = beides zusammen.
     .OUTPUTS
         Array von PSCustomObject: AnzeigeName, Adresse, Alias, Datenbank,
-        Bewegt, Status.
+        Typ (Kategorie), Schluessel (Identitaet fuer Auswahl und
+        Verschiebung), Bewegt, Status.
     #>
     param(
         [Parameter(Mandatory = $false)]
         [AllowEmptyString()]
-        [string]$QuellDatenbank = ""
-    )
+        [string]$QuellDatenbank = "",
 
-    $MusterSystempostfaecher = 'Arbitration|Migration|Health|Audit|Discovery|SystemMailbox|PlusArchive'
+        [Parameter(Mandatory = $false)]
+        [ValidateSet("benutzer", "sonder", "alle")]
+        [string]$Typ = "benutzer"
+    )
 
     # Ohne Quelle wird die gesamte Organisation abgefragt (ein einziger
     # Exchange-Aufruf, kein Clientseitiges Zusammenfuehren mehrerer DBs).
@@ -1516,7 +1586,6 @@ function Get-BenutzerListe {
     }
 
     $Postfaecher = @(Get-Mailbox @Abfrage |
-        Where-Object { (Get-Text $_.RecipientTypeDetails) -notmatch $MusterSystempostfaecher } |
         Sort-Object @{ Expression = { Get-DatenbankAnzeige $_.Database } }, DisplayName)
 
     # Alle MoveRequests einmalig abrufen und auf zwei Schluessel abbilden:
@@ -1541,6 +1610,17 @@ function Get-BenutzerListe {
     # Array statt $null (JSON "Benutzer: null" hielte die JS-Seite fuer
     # einen Fehler).
     $Ergebnis = @(foreach ($Postfach in $Postfaecher) {
+        # Kategorie ermitteln: "Benutzer", die Bezeichnung der Sonderart
+        # oder "" (Health-Postfach - gar nicht zeigen).
+        $Art = Get-PostfachTyp -RecipientTypeDetails (Get-Text $Postfach.RecipientTypeDetails)
+
+        $Passt = switch ($Typ) {
+            "benutzer" { $Art -eq "Benutzer" }
+            "sonder"   { $Art -ne "Benutzer" -and $Art -ne "" }
+            "alle"     { $Art -ne "" }
+        }
+        if (-not $Passt) { continue }
+
         $Status = $null
 
         if ($Bewegte.ContainsKey([string]$Postfach.DistinguishedName)) {
@@ -1550,16 +1630,35 @@ function Get-BenutzerListe {
             $Status = $Bewegte[[string]$Postfach.DisplayName]
         }
 
+        # Auswahl-Schluessel: zunaechst die SMTP-Adresse. Sonderpostfaecher
+        # haben nicht immer eine eigene Adresse - ohne Rueckfaellung stuerzte
+        # die Auswahl auf einem leeren Wert zusammen (alle solchen
+        # Postfaecher gehoerten dann zu EINEM Kaestchen und die Verschiebung
+        # haette nur eines davon getroffen). Darum Alias, Anzeige- und
+        # schliesslich den DN als Ersatz - New-MoveRequest akzeptiert alle
+        # vier Formen als -Identity.
+        $Schluessel = Get-Text $Postfach.PrimarySmtpAddress
+        if ([string]::IsNullOrWhiteSpace($Schluessel)) { $Schluessel = Get-Text $Postfach.Alias }
+        if ([string]::IsNullOrWhiteSpace($Schluessel)) { $Schluessel = Get-Text $Postfach.DisplayName }
+        if ([string]::IsNullOrWhiteSpace($Schluessel)) { $Schluessel = Get-Text $Postfach.DistinguishedName }
+
         [pscustomobject]@{
             AnzeigeName = Get-Text $Postfach.DisplayName
             Adresse     = Get-Text $Postfach.PrimarySmtpAddress
             Alias       = Get-Text $Postfach.Alias
             Datenbank   = Get-DatenbankAnzeige $Postfach.Database
+            Typ         = $Art
+            Schluessel  = $Schluessel
             Bewegt      = ($null -ne $Status)
             Status      = Get-Text $Status
         }
     })
 
+    # Komma vor @(): die Rueckgabe bleibt auch bei null Treffern ein leeres
+    # Array und wird beim schlichten Aufrufer ($Benutzer = Get-...) nicht zu
+    # $null - sonst lieferte die API "Benutzer: null" (gleiche Regel wie in
+    # Get-DatenbankListe). Aufrufer duerfen die Rueckgabe deshalb NICHT mit
+    # @(...) umschliessen, sonst entsteht ein Phantom-Element.
     return ,@($Ergebnis)
 }
 
@@ -3356,6 +3455,18 @@ function Get-DashboardHTML {
             font-weight: 600;
             white-space: nowrap;
         }
+        /* Postfachart (Arbitration, AuditLog, PublicFolder, Archiv, ...)
+           als eigener Marker - der DB-Name bleibt rechts stehen. */
+        .typ-tag {
+            background: #fff4e5;
+            color: #a35b00;
+            border: 1px solid #f0d0a0;
+            border-radius: 10px;
+            padding: 2px 9px;
+            font-size: 11px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
         .versand-schalter {
             background: #0078d4;
             color: white;
@@ -3538,10 +3649,21 @@ $LightCSS
                 </div>
             </div>
 
-            <div class="versand-feld">
-                <label for="benutzerSuche">Postfächer</label>
-                <input type="text" class="versand-suche" id="benutzerSuche"
-                       placeholder="&#128269; Filter nach Name, Adresse, Alias oder Datenbank" oninput="benutzerFiltern()">
+            <div class="versand-zeile">
+                <div class="versand-feld">
+                    <label for="postfachTyp">Postfachart</label>
+                    <select id="postfachTyp" onchange="benutzerLaden()"
+                            title="Sonderpostfaecher werden in der Normalansicht bewusst nicht angezeigt">
+                        <option value="benutzer" selected>Benutzerpostfächer</option>
+                        <option value="sonder">Sonderpostfächer (Arbitration, AuditLog, PublicFolder, Archiv)</option>
+                        <option value="alle">Alle (Benutzer- und Sonderpostfächer)</option>
+                    </select>
+                </div>
+                <div class="versand-feld">
+                    <label for="benutzerSuche">Postfächer filtern</label>
+                    <input type="text" class="versand-suche" id="benutzerSuche"
+                           placeholder="&#128269; Filter nach Name, Adresse, Alias, Typ oder Datenbank" oninput="benutzerFiltern()">
+                </div>
             </div>
 
             <div class="versand-werkzeuge">
@@ -4159,8 +4281,46 @@ $LightCSS
         }
 
         /**
+         * Baut die Adresse fuer /api/benutzer inklusive Quell-Datenbank
+         * und Postfachart (benutzer | sonder | alle). Als eigene Funktion,
+         * damit sich die Parameterkette testen laesst.
+         */
+        function benutzerApiAdresse(quelle, typ) {
+            const parameter = [];
+
+            if (quelle) { parameter.push('quelle=' + encodeURIComponent(quelle)); }
+            parameter.push('typ=' + encodeURIComponent(typ || 'benutzer'));
+
+            return '/api/benutzer?' + parameter.join('&');
+        }
+
+        /**
+         * Auswahl-Schluessel eines Postfachs. Zunaechst die SMTP-Adresse;
+         * Sonderpostfaecher (Arbitration, AuditLog, AuxAuditLog,
+         * PublicFolder, Archiv) haben oft keine eigene - ohne Rueckfaellung
+         * laege der Wert leer da und alle solchen Postfaecher gehoerten zu
+         * EINEM Kaestchen. Darum Alias bzw. Anzeigename als Ersatz.
+         */
+        function benutzerSchluessel(b) {
+            if (!b) { return ''; }
+            return b.Schluessel || b.Adresse || '';
+        }
+
+        /**
+         * Anzeigetext fuer eine Listenzeile: Anzeigename und Adresse,
+         * wobei ein leeres oder identisches Kuerzel weggelassen wird.
+         */
+        function benutzerAnzeige(b) {
+            const name    = b.AnzeigeName || benutzerSchluessel(b) || '(ohne Namen)';
+            const adresse = b.Adresse || b.Alias || '';
+
+            return name + (adresse && adresse !== name ? ' – ' + adresse : '');
+        }
+
+        /**
          * Laedt die Postfaecher. Ohne Quelldatenbank werden alle
-         * Postfaecher aller Datenbanken angezeigt.
+         * Postfaecher aller Datenbanken angezeigt. Die Postfachart
+         * (benutzer | sonder | alle) kommt aus dem Auswahlfeld.
          */
         async function benutzerLaden() {
             const quelle = document.getElementById('quellDatenbank').value;
@@ -4181,9 +4341,9 @@ $LightCSS
             liste.innerHTML = '<div style="color:#888;padding:10px;">Postfächer werden geladen ...</div>';
 
             try {
-                const adresse = quelle
-                    ? '/api/benutzer?quelle=' + encodeURIComponent(quelle)
-                    : '/api/benutzer';
+                const adresse = benutzerApiAdresse(
+                    quelle,
+                    document.getElementById('postfachTyp').value);
 
                 const response = await fetch(adresse, { cache: 'no-store' });
                 if (!response.ok) {
@@ -4229,7 +4389,8 @@ $LightCSS
             return benutzerDaten.filter(function(b) {
                 if (!filter) return true;
                 const text = ((b.AnzeigeName || '') + ' ' + (b.Adresse || '') + ' ' +
-                              (b.Alias || '') + ' ' + (b.Datenbank || '')).toLowerCase();
+                              (b.Alias || '') + ' ' + (b.Typ || '') + ' ' +
+                              (b.Datenbank || '')).toLowerCase();
                 return text.indexOf(filter) !== -1;
             });
         }
@@ -4246,7 +4407,8 @@ $LightCSS
             // eine zweite Verschiebung fuer dasselbe Postfach.
             const aktuell = new Set();
             benutzerDaten.forEach(function(b) {
-                if (!b.Bewegt && auswahl.has(b.Adresse)) aktuell.add(b.Adresse);
+                const schluessel = benutzerSchluessel(b);
+                if (!b.Bewegt && auswahl.has(schluessel)) aktuell.add(schluessel);
             });
             auswahl = aktuell;
 
@@ -4265,8 +4427,8 @@ $LightCSS
 
                 const kasten = document.createElement('input');
                 kasten.type  = 'checkbox';
-                kasten.value = b.Adresse;
-                kasten.checked = auswahl.has(b.Adresse);
+                kasten.value = benutzerSchluessel(b);
+                kasten.checked = auswahl.has(kasten.value);
                 if (b.Bewegt) kasten.disabled = true;
 
                 kasten.addEventListener('change', function() {
@@ -4276,8 +4438,18 @@ $LightCSS
                 });
 
                 const text = document.createElement('span');
-                text.textContent = b.AnzeigeName + ' – ' + b.Adresse +
+                text.textContent = benutzerAnzeige(b) +
                     (b.Bewegt ? ' (bereits in Bewegung: ' + b.Status + ')' : '');
+
+                // Postfachart (Arbitration, AuditLog, AuxAuditLog,
+                // PublicFolder, Archiv, ...) - nur bei Sonderpostfaechern
+                // markiert, damit die Liste auch ohne Erklaerung lesbar ist.
+                if (b.Typ && b.Typ !== 'Benutzer') {
+                    const marke = document.createElement('span');
+                    marke.className = 'typ-tag';
+                    marke.textContent = b.Typ;
+                    zeile.appendChild(marke);
+                }
 
                 // Datenbankzugehoerigkeit rechts - besonders wichtig, wenn
                 // ohne Quell-Datenbank alle Postfaecher angezeigt werden.
@@ -4299,9 +4471,17 @@ $LightCSS
          * Hinweiszeile ueber die aktuelle Anzahl und die Quelle.
          */
         function hinweisText(sichtbar) {
-            const quelle = document.getElementById('quellDatenbank').value;
+            const quelle  = document.getElementById('quellDatenbank').value;
+            const typFeld = document.getElementById('postfachTyp');
+            const typ     = typFeld ? (typFeld.value || 'benutzer') : 'benutzer';
 
-            return sichtbar + ' von ' + benutzerDaten.length + ' Postfächern sichtbar' +
+            const artText = {
+                benutzer: 'Benutzerpostfächer',
+                sonder:   'Sonderpostfächer',
+                alle:     'Benutzer- und Sonderpostfächer'
+            }[typ] || 'Postfächer';
+
+            return sichtbar + ' von ' + benutzerDaten.length + ' ' + artText + ' sichtbar' +
                 (quelle ? ' (Quelle: ' + quelle + ')' : ' (alle Datenbanken)');
         }
 
@@ -5139,12 +5319,23 @@ try {
                     $QuellDatenbank = ""
                     try { $QuellDatenbank = [string]$Anfrage.QueryString["quelle"] } catch { }
 
-                    # Ohne ?quelle= werden ALLE Postfaecher aller
+                    # Postfachart: benutzer (Standard) | sonder | alle.
+                    # Ein unbekannter Wert faellt bewusst auf "benutzer" zurueck,
+                    # damit die Seite auch mit altem JavaScript noch normal laeuft.
+                    $Typ = "benutzer"
+                    try {
+                        $TypRoh = [string]$Anfrage.QueryString["typ"]
+                        if ($TypRoh -in @("benutzer", "sonder", "alle")) { $Typ = $TypRoh }
+                    }
+                    catch { }
+
+                    # Ohne ?quelle= werden ALLE passenden Postfaecher aller
                     # Datenbanken geliefert.
                     try {
-                        $Benutzer  = Get-BenutzerListe -QuellDatenbank $QuellDatenbank
+                        $Benutzer  = Get-BenutzerListe -QuellDatenbank $QuellDatenbank -Typ $Typ
                         $JsonInhalt = [pscustomobject]@{
                             Quelle          = $QuellDatenbank
+                            Typ             = $Typ
                             AlleDatenbanken = [string]::IsNullOrWhiteSpace($QuellDatenbank)
                             Anzahl          = @($Benutzer).Count
                             Benutzer        = $Benutzer
