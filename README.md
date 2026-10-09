@@ -2,7 +2,7 @@
 
 [![GitLab-Projekt](https://img.shields.io/badge/GitLab-Projekt-FC6D26?logo=gitlab&logoColor=white)](https://gitlab.com/RoccoAmmon/Exchange-MoveRequest-Dashboard)
 [![Lizenz: MIT](https://img.shields.io/badge/Lizenz-MIT-4c1?logo=opensourceinitiative&logoColor=white)](LICENSE)
-[![Version 2.11](https://img.shields.io/badge/Version-2.11-007ec6)](CHANGELOG.md)
+[![Version 2.12](https://img.shields.io/badge/Version-2.12-007ec6)](CHANGELOG.md)
 [![Letzter Commit](https://img.shields.io/gitlab/last-commit/RoccoAmmon/Exchange-MoveRequest-Dashboard)](https://gitlab.com/RoccoAmmon/Exchange-MoveRequest-Dashboard/-/commits/main)
 [![Status: stabil](https://img.shields.io/badge/Status-stabil-brightgreen)](https://gitlab.com/RoccoAmmon/Exchange-MoveRequest-Dashboard/-/wikis/Architektur)
 [![Sprache: Deutsch](https://img.shields.io/badge/Sprache-Deutsch-005BBB?logoColor=white)](https://gitlab.com/RoccoAmmon/Exchange-MoveRequest-Dashboard/-/wikis/home)
@@ -196,6 +196,7 @@ Alle Änderungen siehe [CHANGELOG.md](CHANGELOG.md).
 
 | Version | Schwerpunkt |
 |---|---|
+| 2.12 | System-/Arbitration-Postfächer über eigene `Get-Mailbox`-Schalter abrufen (vorher in der Sonderliste ausgeblendet) – dazu die Ansicht „Postfächer mit Archiv" |
 | 2.11 | Versionsnummer in der Web-Oberfläche (Marke im Kopf, Seitentitel, Fußzeile) – aus dem `.NOTES`-Block gelesen |
 | 2.10 | Sonderpostfächer (Arbitration, AuditLog, AuxAuditLog, öffentliche Postfächer, Archiv) separat anzeigen, auswählen und verschieben |
 | 2.9 | Beim Stoppen über die Seite keine Fehlwarnung mehr – Browser-Abbruch gilt nicht als Listener-Fehler |

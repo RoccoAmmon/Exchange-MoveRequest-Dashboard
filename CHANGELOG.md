@@ -3,6 +3,52 @@
 Alle bemerkenswerten Änderungen an **Exchange-MoveRequest-Dashboard**.
 Die Versionierung folgt `MAJOR.MINOR` – das Skript führt die Versionsnummer in `.NOTES`.
 
+## [2.12] – 09.10.2026
+
+### Behoben
+- **Sonderpostfächer erschienen nur unvollständig** – in der Liste stand
+  allein das Discoverysuchpostfach, während `SystemMailbox{…}`,
+  `FederatedEmail` und `Migration.` fehlten. Ursache: `Get-Mailbox`
+  **ohne Schalter** liefert System- und Arbitration-Postfächer nicht
+  heraus (Microsoft-Doku: `-Arbitration` für Arbitration-Postfächer,
+  `-AuditLog`/`-AuxAuditLog` für die Audit-Postfächer).
+  `Get-BenutzerListe` fragt deshalb zusätzlich mit `-Arbitration`,
+  `-AuditLog`, `-AuxAuditLog`, `-Migration`, `-PublicFolder` und
+  `-Archive` ab:
+  - jede Quelle läuft einzeln im `try` – ein Fehlschlag (z. B. fehlende
+    Rechte) verliert nur diese Quelle, nicht die ganze Liste,
+  - die Verfügbarkeit jedes Schalters wird vorab über `Get-Command`
+    geprüft, Versionen ohne einen Schalter laufen weiter,
+  - die Treffer werden nach der Identität zusammengeführt, Doppelte
+    (z. B. `Migration.` aus `-Arbitration` *und* `-Migration`) erscheinen
+    nur einmal,
+  - `-Monitoring` wird bewusst **nicht** abgefragt – Health-Postfächer
+    bleiben wie bisher verborgen.
+
+### Neu
+- **Ansicht „Postfächer mit Archiv"** (`?typ=archiv`): alle Postfächer
+  mit aktiviertem Archiv, auch ganz normale Benutzerpostfächer. Ein
+  Postfach, das *nur* die Archiv-Abfrage liefert (eigenes
+  Archiv-Postfach), bekommt die Kategorie `Archiv`; ein Hauptpostfach
+  mit Archiv bleibt weiterhin in der Benutzerliste. Jedes Objekt trägt
+  die neue Kennung `Archiv`, die Liste zeigt sie als Markierung.
+- **`Get-PostfachTyp` prüft zusätzlich Namensmuster**, wenn der
+  `RecipientTypeDetails`-Wert leer oder unbekannt ist:
+  `SystemMailbox{…}`, `FederatedEmail.`, `Migration.`, `AuditMailbox`,
+  `AuxAuditMailbox`, `HealthMailbox` und `MsExchDiscoveryMailbox`. Ein
+  ausdrücklich gemeldeter Benutzer-Typ (`UserMailbox`, `SharedMailbox`,
+  `RoomMailbox` …) gewinnt dagegen immer. Neu ausgeblendet wird auch
+  `MonitoringMailbox`.
+
+### Getestet
+- 60 neue Prüfungen: die abgefragten Schalter werden protokolliert
+  (inkl. „Monitoring wird *nicht* abgefragt"), Zusammenführung ohne
+  Duplikate, Fehlerresilienz einer fehlschlagenden Quelle, die
+  Namensmuster einzeln, `?typ=archiv` samt Kennung und die Verdrahtung
+  zwischen GUI-Option, API-Whitelist und `ValidateSet`. **276
+  Prüfungen grün**, darunter erstmals die Reihenfolgeprüfung der
+  Kategorien mit sieben Sonderarten.
+
 ## [2.11] – 09.10.2026
 
 ### Neu
