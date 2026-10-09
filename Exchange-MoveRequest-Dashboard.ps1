@@ -59,10 +59,10 @@
 .NOTES
     Autor:          Rocco Ammon
     Erstelldatum:   26.02.2026
-    Stand:          08.10.2026
-    Version:        2.8 (Fehler 32 beim Start behoben: Port-Pruefung direkt
-                            vor dem Listener.Start() - neu dazu Light-Modus
-                            mit -Light)
+    Stand:          09.10.2026
+    Version:        2.9 (Beim Stoppen ueber die Seite keine Fehlwarnung
+                            mehr - Verbindungsabbruch des Browsers gilt
+                            nicht mehr als Listener-Fehler)
     Voraussetzung:  Exchange Server 2019 On-Premises
     Log-Pfad:       C:\ExchangeMigrationLog
     HINWEIS:        Muss als Administrator ausgeführt werden (HttpListener benötigt dies)
@@ -260,6 +260,17 @@
                                   den Grunddaten und ist dadurch deutlich schneller;
                                   die technischen Spalten werden im Dashboard per
                                   CSS ausgeblendet.
+                            - v2.9 Fix: Beim Stoppen ueber die Seite kam die
+                                  WARNUNG "HTTP-Listener Fehler: ... Der angegebene
+                                  Netzwerkname ist nicht mehr verfuegbar" - der
+                                  Browser hatte die Verbindung zuerst zugeklemmt,
+                                  der Server fuhr im selben Atemzug sauber
+                                  herunter. Neue Funktion
+                                  Test-BrowserVerbindungsabbruch erkennt solche
+                                  Client-Abbrueche (Win32 64, 995, 1225, 1236,
+                                  10053, 10054, 10058) ueber die Exception-Kette
+                                  und protokolliert sie als STILL statt als
+                                  WARNUNG - echte Listener-Fehler bleiben WARNUNG.
 
     BEI ENVELOPE-FEHLERN (Get-MoveRequestStatistics):
         In einer Exchange Management Shell ausführen und Skript neu starten:
@@ -1067,6 +1078,64 @@ function Get-LaufendeDashboardInstanzen {
     # Siehe Get-DashboardProzess: kein Komma-Operator, sonst entsteht beim
     # Aufrufer mit @(...) ein Phantom-Element ohne Inhalt.
     return $Zeilen
+}
+
+function Test-BrowserVerbindungsabbruch {
+    <#
+    .SYNOPSIS
+        Prueft, ob eine Exception nur bedeutet, dass der Browser die
+        Verbindung zuerst zugeklemmt hat - und darum KEIN Fehler ist.
+    .DESCRIPTION
+        Beim Stoppen ueber die Seite, beim Schliessen des Tabs oder beim
+        Abbruch eines laufenden Polls ist der Client weg, waehrend das Skript
+        gerade in den Response-Stream schreibt. Formal kommt dabei eine
+        HttpListenerException mit Win32-Fehler 64 ("Der angegebene
+        Netzwerkname ist nicht mehr verfuegbar") bzw. ein abgebrochener
+        Socket heraus - inhaltlich ist das ganz normal.
+
+        Frueher stand genau das als WARNUNG im Log und wirkte wie ein Fehler
+        beim Stoppen, obwohl der Server sauber heruntergefahren ist.
+
+        PowerShell liefert die Exception als Wrapper (MethodInvocationException)
+        mit InnerException - deshalb wird die Kette durchlaufen und erst
+        zuletzt auf die Meldung geschaut.
+    .PARAMETER Exception
+        Die abgefangene Exception ($_.Exception).
+    .OUTPUTS
+        True, wenn der Client die Verbindung zuerst geschlossen hat.
+    #>
+    param(
+        [Parameter(Mandatory = $false)]$Exception
+    )
+
+    if ($null -eq $Exception) { return $false }
+
+    # Win32-Codes, die nur "die andere Seite ist weg" bedeuten:
+    #   64    ERROR_BAD_NET_NAME         Netzwerkname nicht mehr verfuegbar
+    #   995   ERROR_OPERATION_ABORTED    Vorgang abgebrochen
+    #   1225  ERROR_OPERATION_ABORTED    Vorgang abgebrochen
+    #   1236  ERROR_CONNECTION_ABORTED   Verbindung abgebrochen
+    #   10053 WSAECONNABORTED            Verbindung unerwartet beendet
+    #   10054 WSAECONNRESET              vom Partner zurueckgesetzt
+    #   10058 WSAESHUTDOWN               Socket steht nicht mehr
+    $TrennungsCodes = @(64, 995, 1225, 1236, 10053, 10054, 10058)
+
+    $Aktuell = $Exception
+    while ($null -ne $Aktuell) {
+        if ($Aktuell -is [System.Net.HttpListenerException]) {
+            if ($TrennungsCodes -contains [int]$Aktuell.ErrorCode) { return $true }
+        }
+        $Aktuell = $Aktuell.InnerException
+    }
+
+    # Sicherheitsnetz: dieselbe Ursache, aber in einem anderen Exception-Typ
+    # oder nur als Meldungstext durchgereicht.
+    $Meldung = [string]$Exception.Message
+    if ($Meldung -match 'netzwerkname|network name is no longer|forcibly closed|connection reset|connection was aborted') {
+        return $true
+    }
+
+    return $false
 }
 
 function Test-DashboardAntwort {
@@ -5283,7 +5352,19 @@ try {
         }
         catch [System.Net.HttpListenerException] {
             if (-not $script:ServerLaeuft) { break }
-            Write-Log -Nachricht "HTTP-Listener Fehler: $($_.Exception.Message)" -Typ "WARNUNG"
+
+            if (Test-BrowserVerbindungsabbruch -Exception $_.Exception) {
+                # Der Browser hat die Verbindung zuerst zugeklemmt: Stoppen
+                # ueber die Seite, Tab geschlossen oder laufender Poll
+                # abgebrochen. Das ist kein Fehler - der Server faehrt hier
+                # ohnehin sauber runter, darum gehoert das nicht als WARNUNG
+                # ins Log (frueher kam hier "Der angegebene Netzwerkname ist
+                # nicht mehr verfuegbar").
+                Write-Log -Nachricht "Verbindung vom Browser geschlossen - Anfrage abgebrochen (beim Stoppen oder Schliessen des Tabs ganz normal)." -Typ "STILL"
+            }
+            else {
+                Write-Log -Nachricht "HTTP-Listener Fehler: $($_.Exception.Message)" -Typ "WARNUNG"
+            }
         }
         catch {
             # Abbruch durch den Browser ist normal (Timeout, Tab geschlossen)
