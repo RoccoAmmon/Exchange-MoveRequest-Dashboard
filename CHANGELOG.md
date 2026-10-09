@@ -3,6 +3,31 @@
 Alle bemerkenswerten Änderungen an **Exchange-MoveRequest-Dashboard**.
 Die Versionierung folgt `MAJOR.MINOR` – das Skript führt die Versionsnummer in `.NOTES`.
 
+## [2.11] – 09.10.2026
+
+### Neu
+- **Die Versionsnummer steht jetzt in der Web-Oberfläche** – als Marke neben
+  der Überschrift (`.version-marke`, mit Tooltip „Version des Skripts"), im
+  Seitentitel (`Exchange MoveRequest Live-Dashboard v2.11`, praktisch bei
+  mehreren offenen Tabs) und in der Fußzeile
+  (`Exchange MoveRequest Live-Dashboard | Version 2.11 | …`).
+- Neue Funktion **`Get-SkriptVersion`** liest die Nummer aus dem
+  `.NOTES`-Block der Skriptdatei (Zeile `Version:`) und puffert das
+  Ergebnis. Damit gibt es **eine** Quelle: ein Versionswechsel beim
+  Aktualisieren des Skripts erscheint automatisch überall, Skript und
+  Oberfläche können nicht auseinanderlaufen. Ist die Datei nicht lesbar
+  (z. B. Start über eine Pipe), zeigt die Anzeige `unbekannt`, statt dass
+  die Seite scheitert.
+
+### Getestet
+- 14 neue Prüfungen (`test_version_anzeige.ps1`): genau eine
+  `Version:`-Zeile im Skript (Schutz vor einem falschen Regex-Treffer),
+  Auslesen samt Zwischenspeicher und Pfad-Fallback auf `unbekannt`,
+  Seitentitel, Kopfmarke, Fußzeile und CSS – zusätzlich im Light-Modus,
+  wo die Fußzeile die Nummer behalten muss. Die Referenz wird im Test
+  direkt aus der Datei ermittelt, der Test bleibt also bei jeder
+  kommenden Versionsnummer gültig.
+
 ## [2.10] – 09.10.2026
 
 ### Neu
