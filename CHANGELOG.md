@@ -3,6 +3,41 @@
 Alle bemerkenswerten Änderungen an **Exchange-MoveRequest-Dashboard**.
 Die Versionierung folgt `MAJOR.MINOR` – das Skript führt die Versionsnummer in `.NOTES`.
 
+## [2.13] – 09.10.2026
+
+### Geändert
+- **Fehlgeschlagene Verschiebungen erklären sich selbst** – beim
+  Verschieben eines System-/Arbitration-Postfachs scheiterte
+  `New-MoveRequest` im Hintergrund-Job mit „Der Zugriff wurde
+  verweigert", während derselbe Befehl in der Exchange Management
+  Shell lief. Die Meldung enthielt bislang nur den Klartext der
+  Exception. Jeder fehlgeschlagene Lauf liefert jetzt drei Zusätze:
+  - **Handlungshinweis** bei „Der Zugriff wurde verweigert"
+    (Rechte-/Kontextproblem des Jobs: manueller EMS-Vergleichstest,
+    ggf. Dashboard als Administrator starten) – beim Store-Fehler
+    der Ziel-Datenbank bleibt der bekannte Hinweis bestehen,
+  - **technische Details**: Exception-Typ, InnerException und
+    `FullyQualifiedErrorId`,
+  - **Ausführungskontext des Jobs**: Benutzerkonto, Administrator-
+    Status, PowerShell-Version und -Bitness.
+  Die Funktion `Baue-FehlerText` steht in beiden Job-Skriptblöcken
+  (Verschiebeauftrag und Resume/Remove), weil `Start-Job` keine
+  Funktionen des Hauptskripts kennt.
+
+### Neu
+- **Ausführungskontext beim Skriptstart**: das Log nennt jetzt
+  Konto, Administrator-Status, PowerShell-Version und -Bitness
+  (`Ausfuehrungskontext:`). `Start-Job` startet einen Kindprozess
+  mit demselben Token – der Job läuft also immer in diesem
+  Kontext, und ein Unterschied zur manuellen EMS ist damit sofort
+  sichtbar.
+- **Test `test_fehlerdiagnose.ps1`** (34 Prüfungen): der echte
+  Job-Block läuft synchron mit Stubs (Zugriff verweigert,
+  Store-Fehler, Erfolg, beide WhatIf-Wege, Snap-In-Fehler), dazu
+  Quelltext- und Versions-Sync-Prüfung. Die Versionsprüfung in
+  `test_sonderpostfaecher.ps1` ist jetzt versionsunabhängig
+  (`.NOTES`-Version muss dem letzten Historie-Eintrag entsprechen).
+
 ## [2.12] – 09.10.2026
 
 ### Behoben
