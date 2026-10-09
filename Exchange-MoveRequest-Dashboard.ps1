@@ -63,9 +63,8 @@
     Autor:          Rocco Ammon
     Erstelldatum:   26.02.2026
     Stand:          09.10.2026
-    Version:        2.10 (Sonderpostfaecher separat: Postfachart-Auswahl
-                            fuer Arbitration, AuditLog, AuxAuditLog,
-                            PublicFolder und Archiv)
+    Version:        2.11 (Versionsnummer sichtbar in der Web-Oberflaeche:
+                            Kopfzeile, Seitentitel und Fusszeile)
     Voraussetzung:  Exchange Server 2019 On-Premises
     Log-Pfad:       C:\ExchangeMigrationLog
     HINWEIS:        Muss als Administrator ausgeführt werden (HttpListener benötigt dies)
@@ -288,6 +287,14 @@
                                   Felder "Typ" sowie "Schluessel" (SMTP, sonst
                                   Alias, Anzeigename, DN) - Sonderpostfaecher
                                   haben oft keine eigene Adresse.
+                            - v2.11 Neu: Die Versionsnummer steht jetzt in der
+                                  Web-Oberflaeche - als Marke neben der
+                                  Ueberschrift, im Seitentitel und in der
+                                  Fusszeile. Neue Funktion Get-SkriptVersion
+                                  liest die Nummer aus dem .NOTES-Block dieses
+                                  Skripts, es gibt also nur EINE Quelle und
+                                  Oberflaeche und Skript koennen nicht
+                                  auseinanderlaufen.
 
     BEI ENVELOPE-FEHLERN (Get-MoveRequestStatistics):
         In einer Exchange Management Shell ausführen und Skript neu starten:
@@ -3027,6 +3034,54 @@ function Get-MoveRequestDaten {
     return (Set-SnapshotAlter -Snapshot $script:LetzterSnapshot)
 }
 
+function Get-SkriptVersion {
+    <#
+    .SYNOPSIS
+        Liefert die Versionsnummer aus dem .NOTES-Block dieses Skripts.
+
+        Dort steht die Nummer in der Form "Version:   2.11 (...)" - der
+        Regex-Schnitt liefert daraus "2.11". Header, Seitentitel und
+        Fusszeile des Dashboards werden so aus EINER Quelle bespielt: eine
+        aktualisierte Version kann nie vergessen werden und Skript und
+        Oberflaeche koennen nicht auseinanderlaufen.
+
+        Das Ergebnis wird gepuffert, die Datei wird also nur einmal gelesen.
+    .PARAMETER Pfad
+        Zu lesende Datei - Standard ist dieses Skript selbst. Der Parameter
+        existiert nur fuer Tests; produktiv wird nie uebergeben.
+    .OUTPUTS
+        String - z.B. "2.11"; "unbekannt", wenn die Datei nicht lesbar ist
+        (z.B. beim Start ueber eine Pipe).
+    #>
+    param(
+        [Parameter(Mandatory = $false)]
+        [AllowEmptyString()]
+        [string]$Pfad = ""
+    )
+
+    if (-not [string]::IsNullOrWhiteSpace($script:SkriptVersionCache)) {
+        return $script:SkriptVersionCache
+    }
+
+    $Version = "unbekannt"
+
+    try {
+        if ([string]::IsNullOrWhiteSpace($Pfad)) { $Pfad = [string]$PSCommandPath }
+        if ([string]::IsNullOrWhiteSpace($Pfad)) { $Pfad = [string]$MyInvocation.PSCommandPath }
+
+        if (-not [string]::IsNullOrWhiteSpace($Pfad) -and (Test-Path -LiteralPath $Pfad)) {
+            # UTF-8 mit BOM: ReadAllText erkennt die Kennzeichnung selbst.
+            $Text = [System.IO.File]::ReadAllText($Pfad)
+            $Treffer = [regex]::Match($Text, '(?m)^[ \t]*Version:[ \t]+(?<Version>[0-9]+(?:\.[0-9]+)+)')
+            if ($Treffer.Success) { $Version = $Treffer.Groups['Version'].Value }
+        }
+    }
+    catch { }
+
+    $script:SkriptVersionCache = $Version
+    return $Version
+}
+
 function Get-DashboardHTML {
     <#
     .SYNOPSIS
@@ -3046,13 +3101,17 @@ function Get-DashboardHTML {
     $LightFussnote = ""
     if ($Light) { $LightFussnote = " Light-Modus |" }
 
+    # Versionsnummer aus dem .NOTES-Block - Kopfzeile, Seitentitel und
+    # Fusszeile zeigen damit immer genau die Version, die hier laeuft.
+    $SkriptVersion = Get-SkriptVersion
+
     $HTML = @"
 <!DOCTYPE html>
 <html lang="de">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Exchange MoveRequest Live-Dashboard</title>
+    <title>Exchange MoveRequest Live-Dashboard v$SkriptVersion</title>
     <style>
         /* ============ Grundlegendes Layout ============ */
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -3079,6 +3138,20 @@ function Get-DashboardHTML {
         }
         .header h1 { font-size: 28px; margin-bottom: 8px; }
         .header p { font-size: 14px; opacity: 0.9; }
+        /* Versionsnummer neben der Ueberschrift - kommt aus dem
+           .NOTES-Block des Skripts (Get-SkriptVersion) */
+        .version-marke {
+            display: inline-block;
+            background: rgba(255, 255, 255, 0.18);
+            border: 1px solid rgba(255, 255, 255, 0.45);
+            border-radius: 12px;
+            padding: 3px 12px;
+            margin-left: 10px;
+            font-size: 15px;
+            font-weight: 600;
+            vertical-align: middle;
+            white-space: nowrap;
+        }
         #alterAnzeige { font-size: 12px; opacity: 0.8; margin-top: 4px; }
         #alterAnzeige.veraltet { color: #ffd166; font-weight: 600; }
 
@@ -3554,7 +3627,7 @@ $LightCSS
     <!-- Header -->
     <div class="header">
         <div>
-            <h1>&#128230; Exchange MoveRequest Live-Dashboard</h1>
+            <h1>&#128230; Exchange MoveRequest Live-Dashboard <span class="version-marke" title="Version des Skripts (aus dem .NOTES-Block)">v$SkriptVersion</span></h1>
             <p>Server: $ExchangeServer | Aktualisierung alle $AktualisierungsIntervall Sekunden</p>
             <p id="zeitstempelAnzeige">Letzte Aktualisierung: wird geladen...</p>
             <p id="alterAnzeige"></p>
@@ -3749,8 +3822,8 @@ $LightCSS
 
     <!-- Footer -->
     <div class="footer">
-        <p>Exchange MoveRequest Live-Dashboard | PowerShell HttpListener |
-           Intervall: $AktualisierungsIntervall s |$LightFussnote
+        <p>Exchange MoveRequest Live-Dashboard | Version $SkriptVersion |
+           PowerShell HttpListener | Intervall: $AktualisierungsIntervall s |$LightFussnote
            <a href="/api/data" target="_blank" style="color: #0078d4;">JSON-API</a> |
            <a href="#" onclick="stopServer()" style="color: #dc3545;">Server stoppen</a>
         </p>
