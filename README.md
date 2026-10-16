@@ -13,6 +13,12 @@
 [![Adminrechte erforderlich](https://img.shields.io/badge/Adminrechte-erforderlich-orange)](https://gitlab.com/RoccoAmmon/Exchange-MoveRequest-Dashboard/-/wikis/Fehlerbehebung)
 [![Lesbar in 5 Minuten](https://img.shields.io/badge/README-Lesbar%20in%205%20Minuten-lightgrey)](https://gitlab.com/RoccoAmmon/Exchange-MoveRequest-Dashboard/-/wikis/Installation)
 
+![GUI des Exchange-MoveRequest-Dashboard mit Statuskacheln, Verschiebeformular und Live-Tabelle der MoveRequests](docs/gui-screenshot.png)
+
+> **DE:** Die Web-Oberfläche des Dashboards – oben die Statuskacheln, mittig das Formular **„Neue Verschiebeanforderung"**, darunter die Live-Tabelle aller MoveRequests (aktive Jobs oben, suspendierte mit **„Abschließen"**-Button und Mehrfachauswahl). Die Aufnahme stammt aus einer Testfassung ohne Exchange-Anbindung und zeigt **Beispieldaten** – Servername, Postfächer und Zeiten sind frei erfunden. Die im Bild gezeigte Version **v2.14** entspricht dem Versions-Badge oben. In der Live-Umgebung aktualisiert sich die Seite automatisch (Standard-Intervall 10 s, ohne Seiten-Reload).
+>
+> **EN:** The dashboard's web UI – status tiles on top, the **"New move request"** form in the middle, and the live table of all move requests below (active jobs first, suspended ones with a **"Complete"** button and multi-selection). The screenshot was taken from a test build without an Exchange connection and shows **sample data** – server name, mailboxes and timestamps are fictional. The version shown in the image (**v2.14**) matches the version badge above. In a live environment the page refreshes automatically (default interval 10 s, no page reload).
+
 **Live-Dashboard für Exchange Server MoveRequests** – ein einzelnes PowerShell-Skript startet einen lokalen
 Mini-Webserver und zeigt in Echtzeit den Status aller Postfachverschiebungen an. Neu und abgeschlossene
 Verschiebeanforderungen lassen sich direkt aus der Web-GUI starten, fortsetzen und aufräumen.

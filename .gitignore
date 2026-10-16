@@ -2,6 +2,7 @@
 .wiki/
 
 # PowerShell / Editor
+*_Test.ps1
 *.log
 .vscode/
 .vs/
