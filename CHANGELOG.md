@@ -3,6 +3,27 @@
 Alle bemerkenswerten Änderungen an **Exchange-MoveRequest-Dashboard**.
 Die Versionierung folgt `MAJOR.MINOR` – das Skript führt die Versionsnummer in `.NOTES`.
 
+## [2.15] – 16.10.2026
+
+### Hinzugefügt
+- **Update-Check gegen die GitLab-Releases-API** (gleiches Prinzip wie bei
+  der Hyper-V-Documentation): beim Start läuft der Check asynchron in einem
+  eigenen Runspace (3 Versuche, Timeout 3 s, TLS 1.2) – Serverstart und
+  Frontend-Polling werden nie auf das Netzwerk blockiert. Erscheint eine
+  neuere Version:
+  - die Web-Oberfläche zeigt neben der Versionsmarke ein klickbares
+    orange **Update-Badge** („Update verfügbar: vX.Y.Z") mit Link auf die
+    Release-Seite,
+  - das Log nennt Tag und Release-URL (genau einmal, sobald das Ergebnis
+    vorliegt),
+  - die Felder `UpdateVerfuegbar`, `UpdateTag`, `UpdateUrl` und
+    `UpdateGeprueft` kommen mit jedem `/api/data`-Poll als JSON ins
+    Frontend.
+- **Parameter `-KeinUpdateCheck`** – unterdrückt den Check (Airgap,
+  Offline, gesperrte Proxy-Umgebungen). Fehler, Offline und Proxy-Sperren
+  bleiben folgenlos: das Dashboard funktioniert auch ohne Internet
+  unverändert weiter.
+
 ## [2.14] – 09.10.2026
 
 ### Hinzugefügt

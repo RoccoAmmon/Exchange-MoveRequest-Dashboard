@@ -2,7 +2,7 @@
 
 [![GitLab-Projekt](https://img.shields.io/badge/GitLab-Projekt-FC6D26?logo=gitlab&logoColor=white)](https://gitlab.com/RoccoAmmon/Exchange-MoveRequest-Dashboard)
 [![Lizenz: MIT](https://img.shields.io/badge/Lizenz-MIT-4c1?logo=opensourceinitiative&logoColor=white)](LICENSE)
-[![Version 2.14](https://img.shields.io/badge/Version-2.14-007ec6)](CHANGELOG.md)
+[![Version 2.15](https://img.shields.io/badge/Version-2.15-007ec6)](CHANGELOG.md)
 [![Letzter Commit](https://img.shields.io/gitlab/last-commit/RoccoAmmon/Exchange-MoveRequest-Dashboard)](https://gitlab.com/RoccoAmmon/Exchange-MoveRequest-Dashboard/-/commits/main)
 [![Status: stabil](https://img.shields.io/badge/Status-stabil-brightgreen)](https://gitlab.com/RoccoAmmon/Exchange-MoveRequest-Dashboard/-/wikis/Architektur)
 [![Sprache: Deutsch](https://img.shields.io/badge/Sprache-Deutsch-005BBB?logoColor=white)](https://gitlab.com/RoccoAmmon/Exchange-MoveRequest-Dashboard/-/wikis/home)
@@ -15,9 +15,9 @@
 
 ![GUI des Exchange-MoveRequest-Dashboard mit Statuskacheln, Verschiebeformular und Live-Tabelle der MoveRequests](docs/gui-screenshot.png)
 
-> **DE:** Die Web-Oberfläche des Dashboards – oben die Statuskacheln, mittig das Formular **„Neue Verschiebeanforderung"**, darunter die Live-Tabelle aller MoveRequests (aktive Jobs oben, suspendierte mit **„Abschließen"**-Button und Mehrfachauswahl). Die Aufnahme stammt aus einer Testfassung ohne Exchange-Anbindung und zeigt **Beispieldaten** – Servername, Postfächer und Zeiten sind frei erfunden. Die im Bild gezeigte Version **v2.14** entspricht dem Versions-Badge oben. In der Live-Umgebung aktualisiert sich die Seite automatisch (Standard-Intervall 10 s, ohne Seiten-Reload).
+> **DE:** Die Web-Oberfläche des Dashboards – oben die Statuskacheln, mittig das Formular **„Neue Verschiebeanforderung"**, darunter die Live-Tabelle aller MoveRequests (aktive Jobs oben, suspendierte mit **„Abschließen"**-Button und Mehrfachauswahl). Die Aufnahme stammt aus einer Testfassung ohne Exchange-Anbindung und zeigt **Beispieldaten** – Servername, Postfächer und Zeiten sind frei erfunden. Die Testfassung läuft bewusst mit der Vorversion **v2.14** und zeigt deshalb das Update-Badge „Update verfügbar: v2.15" auf die im Badge oben versionierte aktuelle Veröffentlichung. In der Live-Umgebung aktualisiert sich die Seite automatisch (Standard-Intervall 10 s, ohne Seiten-Reload).
 >
-> **EN:** The dashboard's web UI – status tiles on top, the **"New move request"** form in the middle, and the live table of all move requests below (active jobs first, suspended ones with a **"Complete"** button and multi-selection). The screenshot was taken from a test build without an Exchange connection and shows **sample data** – server name, mailboxes and timestamps are fictional. The version shown in the image (**v2.14**) matches the version badge above. In a live environment the page refreshes automatically (default interval 10 s, no page reload).
+> **EN:** The dashboard's web UI – status tiles on top, the **"New move request"** form in the middle, and the live table of all move requests below (active jobs first, suspended ones with a **"Complete"** button and multi-selection). The screenshot was taken from a test build without an Exchange connection and shows **sample data** – server name, mailboxes and timestamps are fictional. The test build deliberately runs the previous version **v2.14**, which is why the update badge "Update verfügbar: v2.15" points to the current release shown in the badge above. In a live environment the page refreshes automatically (default interval 10 s, no page reload).
 
 **Live-Dashboard für Exchange Server MoveRequests** – ein einzelnes PowerShell-Skript startet einen lokalen
 Mini-Webserver und zeigt in Echtzeit den Status aller Postfachverschiebungen an. Neu und abgeschlossene
@@ -40,6 +40,7 @@ Verschiebeanforderungen lassen sich direkt aus der Web-GUI starten, fortsetzen u
 | **Vorabtest** | `New-MoveRequest -WhatIf` vor dem eigentlichen Start (aus / erst prüfen dann verschieben / nur prüfen) |
 | **Priorität & BadItemLimit** | Auswahl in der GUI, werden direkt an `New-MoveRequest` übergeben |
 | **Stabil bei Last** | Snapshot-Cache, Stats-Cache, parallele Statistikabrufe, gedämmptes Log-Rotation – siehe [Stabilitätskern](#stabilitätskern-v20) |
+| **Update-Check** | Prüft beim Start asynchron gegen die GitLab-Releases-API und zeigt bei neuerer Version ein klickbares **Update-Badge** im Kopf (plus Log-Hinweis). Abschaltbar mit `-KeinUpdateCheck` |
 | **Zweite Instanz** | Läuft auf dem Ziel-Port schon ein Dashboard, wird diese **beim Start automatisch beendet** (sauber über `/api/stop`, sonst `Stop-Process`) – Abschaltbar mit `-KeinAutoStopp`. Geprüft wird **zweimal**: einmal früh beim Start und noch einmal unmittelbar **vor** `$Listener.Start()`; nach Fehler 32 wird einmal nachgelegt |
 | **Light-Modus** | `-Light` (Alias `-NurStatus`): nur Anzeigename, Status, Quell-/Ziel-DB und Batch – `Get-MoveRequestStatistics` bleibt komplett aus, die technischen Spalten sind ausgeblendet. Deutlich schneller bei vielen hundert Verschiebeanforderungen |
 | **Filter** | Auf einen Move-Batch eingeschränkt starten (`-BatchName`), Quell-/Ziel-Datenbank frei wählbar |
@@ -98,6 +99,7 @@ Dashboard beenden: Schalter **„Server stoppen"** in der GUI oder `GET http://l
 | `-KeinBrowser` | aus | Browser nicht automatisch öffnen |
 | `-KeinAutoStopp` | aus | Andere Instanz auf demselben Port **nicht** automatisch beenden |
 | `-Light` | aus | Light-Modus (Alias `-NurStatus`): nur Status, Name, Quell-/Ziel-DB und Batch – keine Statistikabrufe, technische Spalten ausgeblendet |
+| `-KeinUpdateCheck` | aus | Update-Check gegen die GitLab-Releases-API unterdrücken (Airgap/Offline); Fehler und Offline-Zustände bleiben folgenlos |
 
 ## API-Routen
 
@@ -202,6 +204,7 @@ Alle Änderungen siehe [CHANGELOG.md](CHANGELOG.md).
 
 | Version | Schwerpunkt |
 |---|---|
+| 2.15 | **Update-Check** gegen die GitLab-Releases-API: asynchron per Runspace, klickbares Update-Badge in der Web-Oberfläche, Log-Hinweis, Schalter `-KeinUpdateCheck` |
 | 2.14 | **Selbst-Elevation**: ohne Admin-Rechte startet das Skript sich automatisch mit UAC elevated neu (alle Parameter bleiben erhalten); bei Ablehnung Log-Warnung und Hinweisdialog |
 | 2.13 | Fehlgeschlagene Verschiebungen nennen Ausführungskontext (Konto, Administrator-Status, PowerShell), Exception-Details und einen Handlungshinweis („Zugriff wurde verweigert") |
 | 2.12 | System-/Arbitration-Postfächer über eigene `Get-Mailbox`-Schalter abrufen (vorher in der Sonderliste ausgeblendet) – dazu die Ansicht „Postfächer mit Archiv" |
