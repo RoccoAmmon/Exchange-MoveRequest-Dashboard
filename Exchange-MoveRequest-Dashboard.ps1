@@ -64,11 +64,10 @@
 .NOTES
     Autor:          Rocco Ammon
     Erstelldatum:   26.02.2026
-    Stand:          09.10.2026
-    Version:        2.14 (Selbst-Elevation: ohne Admin-Rechte wird das
-                            Skript automatisch mit UAC elevated neu
-                            gestartet, alle Parameter bleiben erhalten;
-                            bei Ablehnung Warnung und Weiterlauf)
+    Stand:          16.10.2026
+    Version:        2.15 (Update-Check gegen die GitLab-Releases-API:
+                            GUI-Badge und Log-Hinweis, abschaltbar mit
+                            -KeinUpdateCheck)
     Voraussetzung:  Exchange Server 2019 On-Premises
     Log-Pfad:       C:\ExchangeMigrationLog
     HINWEIS:        Startet ohne Admin-Rechte automatisch mit UAC elevated neu (Selbst-Elevation, v2.14); Absage = Warnung und Weiterlauf ohne Erhoehung
@@ -345,6 +344,19 @@
                                   brauchen das erhoehte Token (sonst
                                   meldet der MRS "Der Zugriff wurde
                                   verweigert").
+                            - v2.15 Neu: Update-Check gegen die
+                                  GitLab-Releases-API (asynchron per
+                                  Runspace, 3 Versuche, Timeout 3 s):
+                                  erscheint eine neuere Version, zeigt
+                                  die Web-Oberflaeche ein klickbares
+                                  Update-Badge neben der Versionsmarke
+                                  und das Log einen Hinweis mit der
+                                  Release-URL. Ohne Admin-Rechte bleibt
+                                  der Check unveraendert ausserhalb des
+                                  Elevation-Neustarts. Abschaltbar mit
+                                  -KeinUpdateCheck (Airgap/Offline);
+                                  Fehler, Offline und Proxy-Sperren
+                                  bleiben folgenlos.
 
     BEI ENVELOPE-FEHLERN (Get-MoveRequestStatistics):
         In einer Exchange Management Shell ausführen und Skript neu starten:
@@ -417,7 +429,10 @@ param(
 
     [Parameter(Mandatory = $false, HelpMessage = "Light-Modus: nur den Status der Verschiebeanforderungen, ohne technische Werte")]
     [Alias("NurStatus")]
-    [switch]$Light
+    [switch]$Light,
+
+    [Parameter(Mandatory = $false, HelpMessage = "Update-Check gegen die GitLab-Releases-API unterdruecken (Airgap/Offline)")]
+    [switch]$KeinUpdateCheck
 )
 
 # ============================================================================
@@ -3575,6 +3590,24 @@ function Get-DashboardHTML {
             vertical-align: middle;
             white-space: nowrap;
         }
+        /* Update-Badge (v2.15): Orange wie die Statusfarbe "Suspended",
+           erscheint nur wenn der Update-Check eine neuere GitLab-Version
+           meldet. Klick oeffnet die Release-Seite (target=_blank). */
+        .update-badge {
+            display: inline-block;
+            background: #ffc107;
+            color: #212529;
+            border: 1px solid rgba(255, 255, 255, 0.45);
+            border-radius: 12px;
+            padding: 3px 12px;
+            margin-left: 10px;
+            font-size: 14px;
+            font-weight: 600;
+            text-decoration: none;
+            vertical-align: middle;
+            white-space: nowrap;
+        }
+        .update-badge:hover { background: #ffca2c; }
         #alterAnzeige { font-size: 12px; opacity: 0.8; margin-top: 4px; }
         #alterAnzeige.veraltet { color: #ffd166; font-weight: 600; }
 
@@ -4050,7 +4083,7 @@ $LightCSS
     <!-- Header -->
     <div class="header">
         <div>
-            <h1>&#128230; Exchange MoveRequest Live-Dashboard <span class="version-marke" title="Version des Skripts (aus dem .NOTES-Block)">v$SkriptVersion</span></h1>
+            <h1>&#128230; Exchange MoveRequest Live-Dashboard <span class="version-marke" title="Version des Skripts (aus dem .NOTES-Block)">v$SkriptVersion</span><a id="updateBadge" class="update-badge" href="#" target="_blank" rel="noopener" style="display:none;" title="Oeffnet die Release-Seite dieses Projekts im Browser.">Update verfuegbar</a></h1>
             <p>Server: $ExchangeServer | Aktualisierung alle $AktualisierungsIntervall Sekunden</p>
             <p id="zeitstempelAnzeige">Letzte Aktualisierung: wird geladen...</p>
             <p id="alterAnzeige"></p>
@@ -4458,6 +4491,21 @@ $LightCSS
 
             document.getElementById('updateZaehler').textContent =
                 'Updates: ' + updateZaehler;
+
+            // Update-Badge (v2.15): einblenden, sobald der serverseitige
+            // Check eine neuere GitLab-Version meldet; Klick oeffnet die
+            // Release-Seite. Bei -KeinUpdateCheck bleiben die Felder leer
+            // und das Badge dauerhaft ausgeblendet.
+            const updBadge = document.getElementById('updateBadge');
+            if (updBadge) {
+                if (daten.UpdateVerfuegbar && daten.UpdateUrl) {
+                    updBadge.textContent = 'Update verfügbar: ' + (daten.UpdateTag || '');
+                    updBadge.href = daten.UpdateUrl;
+                    updBadge.style.display = '';
+                } else {
+                    updBadge.style.display = 'none';
+                }
+            }
 
             kachelnAktualisieren(daten.StatusGruppen);
             tabelleAktualisieren(daten.Details);
@@ -5607,6 +5655,110 @@ $LightCSS
 }
 
 # ============================================================================
+# Region: Update-Check (GitLab Releases) - v2.15
+# ============================================================================
+# Fragt die GitLab-Releases-API nach der neuesten Version. Der Check laeuft
+# asynchron in einem eigenen Runspace (wie bei der Hyper-V-Documentation):
+# die Webserver-Startphase und das Polling werden nie blockiert. Offline,
+# Proxy-Sperren und TLS-Probleme bleiben folgenlos - ein Dashboard muss
+# auch ohne Internet laufen. Abschaltbar mit -KeinUpdateCheck.
+
+$script:GitLabProjectId = '87363090'
+$script:UpdateCheckUrl  = "https://gitlab.com/api/v4/projects/$($script:GitLabProjectId)/releases?per_page=1&order_by=released_at&sort=desc"
+
+# Laufender Runspace-Task und dessen Auswertung (wird vom /api/data-Handler
+# bei jedem Poll nicht-blockierend abgeholt).
+$script:UpdateCheckTask = $null
+$script:UpdateStatus    = [PSCustomObject]@{
+    LatestTag       = $null
+    Url             = $null
+    UpdateAvailable = $false
+    Geprueft        = $false
+}
+
+function Start-UpdateCheckAsync {
+    <#
+    .SYNOPSIS>
+        Startet den Update-Check in einem eigenen Runspace, damit weder
+        Serverstart noch das Frontend-Polling auf das Netzwerk warten.
+    .NOTES>
+        Das Skriptblock-Laeufwerk kennt die Hilfsfunktionen nicht - alles
+        wird per Argument uebergeben und das Ergebnis per EndInvoke geholt
+        (Update-UpdateCheckStatus pollt nicht-blockierend).
+    .OUTPUTS>
+        PSCustomObject: Handle (IAsyncResult), PowerShell (Instanz zum Aufraeumen)
+    #>
+    $aktuelleVersion = "v$(Get-SkriptVersion)"
+    $ps = [powershell]::Create()
+    [void]$ps.AddScript({
+        param($url, $currentTag)
+        $out = [PSCustomObject]@{ LatestTag = $null; Url = $null; UpdateAvailable = $false }
+        try {
+            # Windows PowerShell 5.1 waere sonst nur mit TLS 1.0/1.1 dabei
+            [Net.ServicePointManager]::SecurityProtocol =
+                [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+            # Bis zu 3 Versuche mit kurzer Pause: GitLab liefert gelegentlich
+            # 503/Timeout zurueck - das Resultat landet im eigenen Runspace,
+            # der Server wartet nicht darauf
+            $latest = $null
+            for ($attempt = 1; $attempt -le 3 -and -not $latest; $attempt++) {
+                if ($attempt -gt 1) { Start-Sleep -Milliseconds 750 }
+                try { $latest = Invoke-RestMethod -Uri $url -TimeoutSec 3 -ErrorAction Stop | Select-Object -First 1 } catch { }
+            }
+            if ($latest) {
+                $out.LatestTag = [string]$latest.tag_name
+                if ($latest._links -and $latest._links.self) { $out.Url = [string]$latest._links.self }
+                # Nur die Ziffern vergleichen: [version]'v2.1' wirft eine
+                # Ausnahme - sonst bliebe UpdateAvailable immer $false
+                $newVer = if ($out.LatestTag -match '(?<ver>\d+(?:\.\d+)*)') { [version]$matches['ver'] } else { $null }
+                $curVer = if ($currentTag -match '(?<ver>\d+(?:\.\d+)*)') { [version]$matches['ver'] } else { $null }
+                if ($newVer -and $curVer -and $newVer -gt $curVer) { $out.UpdateAvailable = $true }
+            }
+        } catch { }
+        return $out
+    }).AddArgument($script:UpdateCheckUrl).AddArgument($aktuelleVersion)
+    return [PSCustomObject]@{ Handle = $ps.BeginInvoke(); PowerShell = $ps }
+}
+
+function Update-UpdateCheckStatus {
+    <#
+    .SYNOPSIS>
+        Holt das Ergebnis des Update-Check-Runs nicht-blockierend ab und
+        schreibt bei gefundener neuerer Version einen Log-Hinweis.
+    .NOTES>
+        Wird bei jedem /api/data-Aufruf aufgerufen. Erst wenn das Ergebnis
+        vorliegt (Geprueft), geschieht nichts mehr - der Log-Eintrag entsteht
+        also genau einmal.
+    #>
+    if ($null -eq $script:UpdateCheckTask -or $script:UpdateStatus.Geprueft) { return }
+
+    $task = $script:UpdateCheckTask
+    if (-not $task.Handle.IsCompleted) { return }
+
+    try {
+        $info = @($task.PowerShell.EndInvoke($task.Handle)) | Select-Object -First 1
+        if ($info) {
+            $script:UpdateStatus.LatestTag       = $info.LatestTag
+            $script:UpdateStatus.Url             = $info.Url
+            $script:UpdateStatus.UpdateAvailable = [bool]$info.UpdateAvailable
+        }
+    }
+    catch { }
+    finally {
+        try { $task.PowerShell.Dispose() } catch { }
+        $script:UpdateCheckTask = $null
+        $script:UpdateStatus.Geprueft = $true
+    }
+
+    if ($script:UpdateStatus.UpdateAvailable) {
+        Write-Log -Nachricht "Update verfuegbar: $($script:UpdateStatus.LatestTag) (aktuell v$(Get-SkriptVersion)) - $($script:UpdateStatus.Url)" -Typ "INFO"
+    }
+    else {
+        Write-Log -Nachricht "Update-Check abgeschlossen: keine neuere Version als v$(Get-SkriptVersion) gefunden." -Typ "INFO"
+    }
+}
+
+# ============================================================================
 # Region: Hauptskript – HTTP-Server starten
 # ============================================================================
 
@@ -5703,6 +5855,22 @@ try {
         Write-Log -Nachricht "Ausfuehrungskontext: $($KontextIdent.Name), Administrator: $KontextAdmin, PowerShell $($PSVersionTable.PSVersion) ($KontextBitness)" -Typ "INFO"
     }
     catch { }
+
+    # --- Update-Check starten (v2.15, asynchron) --------------------------
+    # Laeuft parallel zur ersten Sammlung und meldet sich erst beim
+    # naechsten /api/data-Poll zurück - der Start wird nie blockiert.
+    if ($KeinUpdateCheck) {
+        Write-Log -Nachricht "Update-Check deaktiviert (-KeinUpdateCheck)." -Typ "INFO"
+    }
+    else {
+        try {
+            $script:UpdateCheckTask = Start-UpdateCheckAsync
+            Write-Log -Nachricht "Update-Check gegen GitLab-Releases gestartet (Projekt-ID $script:GitLabProjectId, asynchron)." -Typ "INFO"
+        }
+        catch {
+            Write-Log -Nachricht "Update-Check konnte nicht gestartet werden: $($_.Exception.Message)" -Typ "WARNUNG"
+        }
+    }
 
     # --- Exchange 2019 PowerShell Snap-in laden ---
     try {
@@ -5852,7 +6020,15 @@ try {
                 }
 
                 "/api/data" {
+                    # Update-Check-Ergebnis abholen (nicht-blockierend) und
+                    # fuer das Frontend-Badge mit ausliefern (v2.15)
+                    if (-not $KeinUpdateCheck) { Update-UpdateCheckStatus }
+
                     $Daten      = Get-MoveRequestDaten
+                    $Daten['UpdateVerfuegbar'] = [bool]$script:UpdateStatus.UpdateAvailable
+                    $Daten['UpdateTag']        = [string]$script:UpdateStatus.LatestTag
+                    $Daten['UpdateUrl']        = [string]$script:UpdateStatus.Url
+                    $Daten['UpdateGeprueft']   = [bool]$script:UpdateStatus.Geprueft
                     $JsonInhalt = $Daten | ConvertTo-Json -Depth 5 -Compress
                     Sende-Antwort -Antwort $Antwort `
                                   -Inhalt $JsonInhalt `
@@ -6157,6 +6333,12 @@ finally {
     }
     catch {
         Write-Log -Nachricht "Fehler beim Beenden des HTTP-Servers: $($_.Exception.Message)" -Typ "WARNUNG"
+    }
+
+    # Update-Check-Runspace freigeben, falls das Ergebnis noch offen ist.
+    if ($script:UpdateCheckTask) {
+        try { $script:UpdateCheckTask.PowerShell.Dispose() } catch { }
+        $script:UpdateCheckTask = $null
     }
 
     # Hintergrund-Jobs der Verschiebeanforderungen beenden. Bereits erstellte
