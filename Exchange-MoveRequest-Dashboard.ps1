@@ -68,7 +68,8 @@
     Version:        2.15 (Update-Check gegen die GitLab-Releases-API:
                             GUI-Badge und Log-Hinweis, abschaltbar mit
                             -KeinUpdateCheck)
-    Voraussetzung:  Exchange Server 2019 On-Premises
+    Voraussetzung:  Exchange Server 2019 oder SE (Subscription Edition),
+                    On-Premises
     Log-Pfad:       C:\ExchangeMigrationLog
     HINWEIS:        Startet ohne Admin-Rechte automatisch mit UAC elevated neu (Selbst-Elevation, v2.14); Absage = Warnung und Weiterlauf ohne Erhoehung
 
@@ -5872,15 +5873,18 @@ try {
         }
     }
 
-    # --- Exchange 2019 PowerShell Snap-in laden ---
+    # --- Exchange PowerShell Snap-in laden (2019 und SE) ---
+    # Der Snap-In-Name Microsoft.Exchange.Management.PowerShell.SnapIn ist
+    # fuer Exchange Server 2019 und Exchange SE (Subscription Edition)
+    # identisch.
     try {
         if (-not (Get-PSSnapin -Name Microsoft.Exchange.Management.PowerShell.SnapIn -ErrorAction SilentlyContinue)) {
-            Write-Log -Nachricht "Lade Exchange 2019 PowerShell Snap-In..." -Typ "INFO"
+            Write-Log -Nachricht "Lade Exchange PowerShell Snap-In (2019/SE)..." -Typ "INFO"
             Add-PSSnapin Microsoft.Exchange.Management.PowerShell.SnapIn -ErrorAction Stop
-            Write-Log -Nachricht "Exchange 2019 PowerShell Snap-In erfolgreich geladen." -Typ "INFO"
+            Write-Log -Nachricht "Exchange PowerShell Snap-In erfolgreich geladen." -Typ "INFO"
         }
         else {
-            Write-Log -Nachricht "Exchange 2019 PowerShell Snap-In ist bereits geladen." -Typ "INFO"
+            Write-Log -Nachricht "Exchange PowerShell Snap-In ist bereits geladen." -Typ "INFO"
         }
     }
     catch {

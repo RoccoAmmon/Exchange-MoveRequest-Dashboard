@@ -8,7 +8,7 @@
 [![Sprache: Deutsch](https://img.shields.io/badge/Sprache-Deutsch-005BBB?logoColor=white)](https://gitlab.com/RoccoAmmon/Exchange-MoveRequest-Dashboard/-/wikis/home)
 <br>
 [![PowerShell 5.1](https://img.shields.io/badge/PowerShell-5.1-5391FE?logo=powershell&logoColor=white)](https://gitlab.com/RoccoAmmon/Exchange-MoveRequest-Dashboard/-/wikis/Installation)
-[![Exchange Server 2019](https://img.shields.io/badge/Exchange%20Server-2019-0078D4)](https://gitlab.com/RoccoAmmon/Exchange-MoveRequest-Dashboard/-/wikis/Installation)
+[![Exchange Server 2019 + SE](https://img.shields.io/badge/Exchange%20Server-2019%20%2B%20SE-0078D4)](https://gitlab.com/RoccoAmmon/Exchange-MoveRequest-Dashboard/-/wikis/Installation)
 [![Windows Server](https://img.shields.io/badge/Platform-Windows%20Server-0078D6?logo=windows&logoColor=white)](https://gitlab.com/RoccoAmmon/Exchange-MoveRequest-Dashboard/-/wikis/Installation)
 [![Adminrechte erforderlich](https://img.shields.io/badge/Adminrechte-erforderlich-orange)](https://gitlab.com/RoccoAmmon/Exchange-MoveRequest-Dashboard/-/wikis/Fehlerbehebung)
 [![Lesbar in 5 Minuten](https://img.shields.io/badge/README-Lesbar%20in%205%20Minuten-lightgrey)](https://gitlab.com/RoccoAmmon/Exchange-MoveRequest-Dashboard/-/wikis/Installation)
@@ -47,7 +47,7 @@ Verschiebeanforderungen lassen sich direkt aus der Web-GUI starten, fortsetzen u
 
 ## Voraussetzungen
 
-- **Exchange Server 2019 On-Premises** (Management-Tools / Exchange Management Shell verfügbar)
+- **Exchange Server 2019 oder Exchange SE (Subscription Edition), On-Premises** (Management-Tools / Exchange Management Shell verfügbar)
 - **Windows PowerShell 5.1** (skriptiert aus der Exchange Management Shell)
 - Ausführung **als Administrator** – `System.Net.HttpListener` benötigt HTTP-Reservierungsrechte; startet das Skript ohne Admin-Rechte, hebt es sich selbst per UAC an (seit v2.14)
 - Netzwerkzugriff auf den Exchange-Server (Localhost reicht, wenn das Skript auf dem Exchange läuft)
