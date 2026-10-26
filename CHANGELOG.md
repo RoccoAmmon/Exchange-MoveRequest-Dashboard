@@ -1,199 +1,115 @@
 # Changelog
 
-Alle bemerkenswerten Änderungen an **Exchange-MoveRequest-Dashboard**.
-Die Versionierung folgt `MAJOR.MINOR` – das Skript führt die Versionsnummer in `.NOTES`.
+Alle bemerkenswerten Änderungen an **Exchange-MoveRequest-Dashboard** / All notable changes to **Exchange-MoveRequest-Dashboard**.  
+Die Versionierung folgt `MAJOR.MINOR` – das Skript führt die Versionsnummer in `.NOTES`. / Versioning follows `MAJOR.MINOR` – the script keeps the version number in `.NOTES`.
+
+---
+
+## [2.16] – 26.10.2026
+
+### Hinzugefügt / Added
+- **Zweisprachigkeit (DE/EN) / Bilingual (DE/EN)** – Die komplette Web-Oberfläche, alle Fehlermeldungen, Log-Texte und die Dokumentation (README, CHANGELOG, Wiki) sind nun zweisprachig.
+- **OS-Spracherkennung / OS Language Detection** – Ohne Parameter `-Sprache` erkennt das Skript die Sprache des Betriebssystems (deutsches Windows → Deutsch, sonst Englisch).
+- **Sprachumschalter in der GUI / Language Switcher in GUI** – Rechts oben im Header (DE/EN) speichert die Auswahl als Cookie (`DashboardSprache`) und lädt die Seite mit `?lang=de|en` neu. Die Wahl gilt auch für alle serverseitig erzeugten Meldungen (Validierung, Auftragsstatus, Log).
+- **Parameter `-Sprache` / `-Language`** – Explizite Vorgabe: `Auto` (Standard), `de` oder `en`.
+- **Lokalisierungs-Infrastruktur / Localization Infrastructure** – Zentrale `$script:Texte` Hashtable mit `ui.*`, `js.*`, `msg.*` Keys; Funktionen `T()` (PowerShell) und `TXT()` (JavaScript) für Platzhalter-Substitution.
+
+### Geändert / Changed
+- Alle Hardcoded-Strings im HTML, JavaScript und PowerShell durch `{{key}}`-Platzhalter bzw. `T()`/`TXT()` ersetzt.
+- `/` Route nutzt `Get-AnfrageSprache` (Query `lang` → Cookie `DashboardSprache` → `$script:Sprache`).
+- `Get-DashboardHTML` erhält `-SprachCode` Parameter, ruft am Ende `Resolve-SprachPlatzhalter` auf.
+- JavaScript: eingebettetes `TEXTE` Objekt (`$JsJson`) mit allen `js.*` Keys; Helper `TXT(key)` für dynamische Texte.
+
+---
 
 ## [2.15] – 16.10.2026
 
-### Hinzugefügt
-- **Update-Check gegen die GitLab-Releases-API** (gleiches Prinzip wie bei
-  der Hyper-V-Documentation): beim Start läuft der Check asynchron in einem
-  eigenen Runspace (3 Versuche, Timeout 3 s, TLS 1.2) – Serverstart und
-  Frontend-Polling werden nie auf das Netzwerk blockiert. Erscheint eine
-  neuere Version:
-  - die Web-Oberfläche zeigt neben der Versionsmarke ein klickbares
-    orange **Update-Badge** („Update verfügbar: vX.Y.Z") mit Link auf die
-    Release-Seite,
-  - das Log nennt Tag und Release-URL (genau einmal, sobald das Ergebnis
-    vorliegt),
-  - die Felder `UpdateVerfuegbar`, `UpdateTag`, `UpdateUrl` und
-    `UpdateGeprueft` kommen mit jedem `/api/data`-Poll als JSON ins
-    Frontend.
-- **Parameter `-KeinUpdateCheck`** – unterdrückt den Check (Airgap,
-  Offline, gesperrte Proxy-Umgebungen). Fehler, Offline und Proxy-Sperren
-  bleiben folgenlos: das Dashboard funktioniert auch ohne Internet
-  unverändert weiter.
+### Hinzugefügt / Added
+- **Update-Check gegen die GitLab-Releases-API** (gleiches Prinzip wie bei der Hyper-V-Documentation): beim Start läuft der Check asynchron in einem eigenen Runspace (3 Versuche, Timeout 3 s, TLS 1.2) – Serverstart und Frontend-Polling werden nie auf das Netzwerk blockiert. Erscheint eine neuere Version:
+  - die Web-Oberfläche zeigt neben der Versionsmarke ein klickbares oranges **Update-Badge** („Update verfügbar: vX.Y.Z" / „Update available: vX.Y.Z") mit Link auf die Release-Seite,
+  - das Log nennt Tag und Release-URL (genau einmal, sobald das Ergebnis vorliegt),
+  - die Felder `UpdateVerfuegbar`, `UpdateTag`, `UpdateUrl` und `UpdateGeprueft` kommen mit jedem `/api/data`-Poll als JSON ins Frontend.
+- **Parameter `-KeinUpdateCheck`** – unterdrückt den Check (Airgap, Offline, gesperrte Proxy-Umgebungen). Fehler, Offline und Proxy-Sperren bleiben folgenlos: das Dashboard funktioniert auch ohne Internet unverändert weiter.
+
+---
 
 ## [2.14] – 09.10.2026
 
-### Hinzugefügt
-- **Selbst-Elevation** – die Ursache von „Der Zugriff wurde verweigert"
-  bei System-/Arbitration-Postfächern ist geklärt (v2.13 diagnostiziert
-  es): ohne UAC bleiben privilegierte Gruppen im Token auf *deny-only*,
-  das erhöhte Token fehlt. Startet das Dashboard ohne Administrator-
-  Rechte, startet es sich jetzt selbst per `Start-Process -Verb RunAs`
-  mit UAC elevated neu:
-  - alle übergebenen Parameter gehen an den Neustart mit
-    (`New-ElevationsArgumente`; ausdrücklich abgeschaltete Schalter
-    entsprechen dem Default und werden nicht weitergegeben – so
-    verhält sich `powershell.exe -File` vorhersehbar),
+### Hinzugefügt / Added
+- **Selbst-Elevation / Self-Elevation** – die Ursache von „Der Zugriff wurde verweigert" / „Access is denied" bei System-/Arbitration-Postfächern ist geklärt (v2.13 diagnostiziert es): ohne UAC bleiben privilegierte Gruppen im Token auf *deny-only*, das erhöhte Token fehlt. Startet das Dashboard ohne Administrator-Rechte, startet es sich jetzt selbst per `Start-Process -Verb RunAs` mit UAC elevated neu:
+  - alle übergebenen Parameter gehen an den Neustart mit (`New-ElevationsArgumente`; ausdrücklich abgeschaltete Schalter entsprechen dem Default und werden nicht weitergegeben – so verhält sich `powershell.exe -File` vorhersehbar),
   - das Ausgangsfenster schliesst sich, der elevated Neustart übernimmt,
-  - **lehnt der Nutzer die UAC-Frage ab**, läuft das Skript ohne
-    Erhebung weiter: WARNUNG im Log plus Hinweisdialog – System- und
-    Arbitration-Postfächer scheitern dann weiterhin,
-  - ohne lesbaren Skriptpfad (Start über eine Pipe) wird nicht
-    umgestartet.
+  - **lehnt der Nutzer die UAC-Frage ab** / **user declines UAC prompt**, läuft das Skript ohne Erhebung weiter: WARNUNG im Log plus Hinweisdialog – System- und Arbitration-Postfächer scheitern dann weiterhin,
+  - ohne lesbaren Skriptpfad (Start über eine Pipe) wird nicht umgestartet.
 
-### Geändert
-- Der `.NOTES`-Hinweis beschreibt jetzt die Selbst-Elevation statt der
-  bloßen Aufforderung, manuell als Administrator zu starten.
+### Geändert / Changed
+- Der `.NOTES`-Hinweis beschreibt jetzt die Selbst-Elevation statt der bloßen Aufforderung, manuell als Administrator zu starten.
+
+---
 
 ## [2.13] – 09.10.2026
 
-### Geändert
-- **Fehlgeschlagene Verschiebungen erklären sich selbst** – beim
-  Verschieben eines System-/Arbitration-Postfachs scheiterte
-  `New-MoveRequest` im Hintergrund-Job mit „Der Zugriff wurde
-  verweigert", während derselbe Befehl in der Exchange Management
-  Shell lief. Die Meldung enthielt bislang nur den Klartext der
-  Exception. Jeder fehlgeschlagene Lauf liefert jetzt drei Zusätze:
-  - **Handlungshinweis** bei „Der Zugriff wurde verweigert"
-    (Rechte-/Kontextproblem des Jobs: manueller EMS-Vergleichstest,
-    ggf. Dashboard als Administrator starten) – beim Store-Fehler
-    der Ziel-Datenbank bleibt der bekannte Hinweis bestehen,
-  - **technische Details**: Exception-Typ, InnerException und
-    `FullyQualifiedErrorId`,
-  - **Ausführungskontext des Jobs**: Benutzerkonto, Administrator-
-    Status, PowerShell-Version und -Bitness.
-  Die Funktion `Baue-FehlerText` steht in beiden Job-Skriptblöcken
-  (Verschiebeauftrag und Resume/Remove), weil `Start-Job` keine
-  Funktionen des Hauptskripts kennt.
+### Geändert / Changed
+- **Fehlgeschlagene Verschiebungen erklären sich selbst / Failed moves explain themselves** – beim Verschieben eines System-/Arbitration-Postfachs scheiterte `New-MoveRequest` im Hintergrund-Job mit „Der Zugriff wurde verweigert" / „Access is denied", während derselbe Befehl in der Exchange Management Shell lief. Die Meldung enthielt bislang nur den Klartext der Exception. Jeder fehlgeschlagene Lauf liefert jetzt drei Zusätze:
+  - **Handlungshinweis / Action hint** bei „Der Zugriff wurde verweigert" / „Access is denied" (Rechte-/Kontextproblem des Jobs: manueller EMS-Vergleichstest, ggf. Dashboard als Administrator starten) – beim Store-Fehler der Ziel-Datenbank bleibt der bekannte Hinweis bestehen,
+  - **technische Details / technical details**: Exception-Typ, InnerException und `FullyQualifiedErrorId`,
+  - **Ausführungskontext des Jobs / Job execution context**: Benutzerkonto, Administrator-Status, PowerShell-Version und -Bitness.
+  Die Funktion `Baue-FehlerText` steht in beiden Job-Skriptblöcken (Verschiebeauftrag und Resume/Remove), weil `Start-Job` keine Funktionen des Hauptskripts kennt.
 
-### Neu
-- **Ausführungskontext beim Skriptstart**: das Log nennt jetzt
-  Konto, Administrator-Status, PowerShell-Version und -Bitness
-  (`Ausfuehrungskontext:`). `Start-Job` startet einen Kindprozess
-  mit demselben Token – der Job läuft also immer in diesem
-  Kontext, und ein Unterschied zur manuellen EMS ist damit sofort
-  sichtbar.
-- **Test `test_fehlerdiagnose.ps1`** (34 Prüfungen): der echte
-  Job-Block läuft synchron mit Stubs (Zugriff verweigert,
-  Store-Fehler, Erfolg, beide WhatIf-Wege, Snap-In-Fehler), dazu
-  Quelltext- und Versions-Sync-Prüfung. Die Versionsprüfung in
-  `test_sonderpostfaecher.ps1` ist jetzt versionsunabhängig
-  (`.NOTES`-Version muss dem letzten Historie-Eintrag entsprechen).
+### Neu / New
+- **Ausführungskontext beim Skriptstart / Execution context at script start**: das Log nennt jetzt Konto, Administrator-Status, PowerShell-Version und -Bitness (`Ausfuehrungskontext:` / `Execution context:`). `Start-Job` startet einen Kindprozess mit demselben Token – der Job läuft also immer in diesem Kontext, und ein Unterschied zur manuellen EMS ist damit sofort sichtbar.
+- **Test `test_fehlerdiagnose.ps1`** (34 Prüfungen): der echte Job-Block läuft synchron mit Stubs (Zugriff verweigert, Store-Fehler, Erfolg, beide WhatIf-Wege, Snap-In-Fehler), dazu Quelltext- und Versions-Sync-Prüfung. Die Versionsprüfung in `test_sonderpostfaecher.ps1` ist jetzt versionsunabhängig (`.NOTES`-Version muss dem letzten Historie-Eintrag entsprechen).
+
+---
 
 ## [2.12] – 09.10.2026
 
-### Behoben
-- **Sonderpostfächer erschienen nur unvollständig** – in der Liste stand
-  allein das Discoverysuchpostfach, während `SystemMailbox{…}`,
-  `FederatedEmail` und `Migration.` fehlten. Ursache: `Get-Mailbox`
-  **ohne Schalter** liefert System- und Arbitration-Postfächer nicht
-  heraus (Microsoft-Doku: `-Arbitration` für Arbitration-Postfächer,
-  `-AuditLog`/`-AuxAuditLog` für die Audit-Postfächer).
-  `Get-BenutzerListe` fragt deshalb zusätzlich mit `-Arbitration`,
-  `-AuditLog`, `-AuxAuditLog`, `-Migration`, `-PublicFolder` und
-  `-Archive` ab:
-  - jede Quelle läuft einzeln im `try` – ein Fehlschlag (z. B. fehlende
-    Rechte) verliert nur diese Quelle, nicht die ganze Liste,
-  - die Verfügbarkeit jedes Schalters wird vorab über `Get-Command`
-    geprüft, Versionen ohne einen Schalter laufen weiter,
-  - die Treffer werden nach der Identität zusammengeführt, Doppelte
-    (z. B. `Migration.` aus `-Arbitration` *und* `-Migration`) erscheinen
-    nur einmal,
-  - `-Monitoring` wird bewusst **nicht** abgefragt – Health-Postfächer
-    bleiben wie bisher verborgen.
+### Behoben / Fixed
+- **Sonderpostfächer erschienen nur unvollständig / Special mailboxes appeared incomplete** – in der Liste stand allein das Discoverysuchpostfach, während `SystemMailbox{…}`, `FederatedEmail` und `Migration.` fehlten. Ursache: `Get-Mailbox` **ohne Schalter** liefert System- und Arbitration-Postfächer nicht heraus (Microsoft-Doku: `-Arbitration` für Arbitration-Postfächer, `-AuditLog`/`-AuxAuditLog` für die Audit-Postfächer). `Get-BenutzerListe` fragt deshalb zusätzlich mit `-Arbitration`, `-AuditLog`, `-AuxAuditLog`, `-Migration`, `-PublicFolder` und `-Archive` ab:
+  - jede Quelle läuft einzeln im `try` – ein Fehlschlag (z. B. fehlende Rechte) verliert nur diese Quelle, nicht die ganze Liste,
+  - die Verfügbarkeit jedes Schalters wird vorab über `Get-Command` geprüft, Versionen ohne einen Schalter laufen weiter,
+  - die Treffer werden nach der Identität zusammengeführt, Doppelte (z. B. `Migration.` aus `-Arbitration` *und* `-Migration`) erscheinen nur einmal,
+  - `-Monitoring` wird bewusst **nicht** abgefragt – Health-Postfächer bleiben wie bisher verborgen.
 
-### Neu
-- **Ansicht „Postfächer mit Archiv"** (`?typ=archiv`): alle Postfächer
-  mit aktiviertem Archiv, auch ganz normale Benutzerpostfächer. Ein
-  Postfach, das *nur* die Archiv-Abfrage liefert (eigenes
-  Archiv-Postfach), bekommt die Kategorie `Archiv`; ein Hauptpostfach
-  mit Archiv bleibt weiterhin in der Benutzerliste. Jedes Objekt trägt
-  die neue Kennung `Archiv`, die Liste zeigt sie als Markierung.
-- **`Get-PostfachTyp` prüft zusätzlich Namensmuster**, wenn der
-  `RecipientTypeDetails`-Wert leer oder unbekannt ist:
-  `SystemMailbox{…}`, `FederatedEmail.`, `Migration.`, `AuditMailbox`,
-  `AuxAuditMailbox`, `HealthMailbox` und `MsExchDiscoveryMailbox`. Ein
-  ausdrücklich gemeldeter Benutzer-Typ (`UserMailbox`, `SharedMailbox`,
-  `RoomMailbox` …) gewinnt dagegen immer. Neu ausgeblendet wird auch
-  `MonitoringMailbox`.
+### Neu / New
+- **Ansicht „Postfächer mit Archiv" / "Mailboxes with Archive" view** (`?typ=archiv`): alle Postfächer mit aktiviertem Archiv, auch ganz normale Benutzerpostfächer. Ein Postfach, das *nur* die Archiv-Abfrage liefert (eigenes Archiv-Postfach), bekommt die Kategorie `Archiv`; ein Hauptpostfach mit Archiv bleibt weiterhin in der Benutzerliste. Jedes Objekt trägt die neue Kennung `Archiv`, die Liste zeigt sie als Markierung.
+- **`Get-PostfachTyp` prüft zusätzlich Namensmuster / checks additional name patterns**, wenn der `RecipientTypeDetails`-Wert leer oder unbekannt ist: `SystemMailbox{…}`, `FederatedEmail.`, `Migration.`, `AuditMailbox`, `AuxAuditMailbox`, `HealthMailbox` und `MsExchDiscoveryMailbox`. Ein ausdrücklich gemeldeter Benutzer-Typ (`UserMailbox`, `SharedMailbox`, `RoomMailbox` …) gewinnt dagegen immer. Neu ausgeblendet wird auch `MonitoringMailbox`.
 
-### Getestet
-- 60 neue Prüfungen: die abgefragten Schalter werden protokolliert
-  (inkl. „Monitoring wird *nicht* abgefragt"), Zusammenführung ohne
-  Duplikate, Fehlerresilienz einer fehlschlagenden Quelle, die
-  Namensmuster einzeln, `?typ=archiv` samt Kennung und die Verdrahtung
-  zwischen GUI-Option, API-Whitelist und `ValidateSet`. **276
-  Prüfungen grün**, darunter erstmals die Reihenfolgeprüfung der
-  Kategorien mit sieben Sonderarten.
+### Getestet / Tested
+- 60 neue Prüfungen: die abgefragten Schalter werden protokolliert (inkl. „Monitoring wird *nicht* abgefragt"), Zusammenführung ohne Duplikate, Fehlerresilienz einer fehlschlagenden Quelle, die Namensmuster einzeln, `?typ=archiv` samt Kennung und die Verdrahtung zwischen GUI-Option, API-Whitelist und `ValidateSet`. **276 Prüfungen grün**, darunter erstmals die Reihenfolgeprüfung der Kategorien mit sieben Sonderarten.
+
+---
 
 ## [2.11] – 09.10.2026
 
-### Neu
-- **Die Versionsnummer steht jetzt in der Web-Oberfläche** – als Marke neben
-  der Überschrift (`.version-marke`, mit Tooltip „Version des Skripts"), im
-  Seitentitel (`Exchange MoveRequest Live-Dashboard v2.11`, praktisch bei
-  mehreren offenen Tabs) und in der Fußzeile
-  (`Exchange MoveRequest Live-Dashboard | Version 2.11 | …`).
-- Neue Funktion **`Get-SkriptVersion`** liest die Nummer aus dem
-  `.NOTES`-Block der Skriptdatei (Zeile `Version:`) und puffert das
-  Ergebnis. Damit gibt es **eine** Quelle: ein Versionswechsel beim
-  Aktualisieren des Skripts erscheint automatisch überall, Skript und
-  Oberfläche können nicht auseinanderlaufen. Ist die Datei nicht lesbar
-  (z. B. Start über eine Pipe), zeigt die Anzeige `unbekannt`, statt dass
-  die Seite scheitert.
+### Neu / New
+- **Die Versionsnummer steht jetzt in der Web-Oberfläche / Version number now in the Web UI** – als Marke neben der Überschrift (`.version-marke`, mit Tooltip „Version des Skripts" / „Script version"), im Seitentitel (`Exchange MoveRequest Live-Dashboard v2.11`, praktisch bei mehreren offenen Tabs) und in der Fußzeile (`Exchange MoveRequest Live-Dashboard | Version 2.11 | …`).
+- Neue Funktion **`Get-SkriptVersion`** liest die Nummer aus dem `.NOTES`-Block der Skriptdatei (Zeile `Version:`) und puffert das Ergebnis. Damit gibt es **eine** Quelle: ein Versionswechsel beim Aktualisieren des Skripts erscheint automatisch überall, Skript und Oberfläche können nicht auseinanderlaufen. Ist die Datei nicht lesbar (z. B. Start über eine Pipe), zeigt die Anzeige `unbekannt` / `unknown`, statt dass die Seite scheitert.
 
-### Getestet
-- 14 neue Prüfungen (`test_version_anzeige.ps1`): genau eine
-  `Version:`-Zeile im Skript (Schutz vor einem falschen Regex-Treffer),
-  Auslesen samt Zwischenspeicher und Pfad-Fallback auf `unbekannt`,
-  Seitentitel, Kopfmarke, Fußzeile und CSS – zusätzlich im Light-Modus,
-  wo die Fußzeile die Nummer behalten muss. Die Referenz wird im Test
-  direkt aus der Datei ermittelt, der Test bleibt also bei jeder
-  kommenden Versionsnummer gültig.
+### Getestet / Tested
+- 14 neue Prüfungen (`test_version_anzeige.ps1`): genau eine `Version:`-Zeile im Skript (Schutz vor einem falschen Regex-Treffer), Auslesen samt Zwischenspeicher und Pfad-Fallback auf `unbekannt`, Seitentitel, Kopfmarke, Fußzeile und CSS – zusätzlich im Light-Modus, wo die Fußzeile die Nummer behalten muss. Die Referenz wird im Test direkt aus der Datei ermittelt, der Test bleibt also bei jeder kommenden Versionsnummer gültig.
+
+---
 
 ## [2.10] – 09.10.2026
 
-### Neu
-- **Sonderpostfächer lassen sich separat anzeigen, auswählen und verschieben.**
-  Über das neue Auswahlfeld **Postfachart** neben dem Postfachfilter:
-  *Benutzerpostfächer* (bisheriges Verhalten), *Sonderpostfächer* oder *Alle*.
-  Zu den Sonderpostfächern zählen **Arbitration, AuditLog, AuxAuditLog,
-  öffentliche Postfächer (`PublicFolder`) und Archiv** sowie SystemMailbox,
-  Migration und Discovery – vorher wurden sie sämtlich ausgefiltert und waren
-  über die GUI gar nicht erreichbar. Health-/Monitoring-Postfächer bleiben
-  weiterhin verborgen.
-- Jede Listenzeile trägt die Postfachart als Markierung (`.typ-tag`), der
-  Textfilter berücksichtigt die Art ebenfalls (z. B. `arbitration` oder
-  `publicfolder`). Die Hinweiszeile nennt die gerade geladene Postfachart.
+### Neu / New
+- **Sonderpostfächer lassen sich separat anzeigen, auswählen und verschieben / Special mailboxes can be displayed, selected, and moved separately.** Über das neue Auswahlfeld **Postfachart** / **Mailbox type** neben dem Postfachfilter: *Benutzerpostfächer* / *User mailboxes* (bisheriges Verhalten), *Sonderpostfächer* / *Special mailboxes* oder *Alle* / *All*. Zu den Sonderpostfächern zählen **Arbitration, AuditLog, AuxAuditLog, öffentliche Postfächer (`PublicFolder`) und Archiv** sowie SystemMailbox, Migration und Discovery – vorher wurden sie sämtlich ausgefiltert und waren über die GUI gar nicht erreichbar. Health-/Monitoring-Postfächer bleiben weiterhin verborgen.
+- Jede Listenzeile trägt die Postfachart als Markierung (`.typ-tag`), der Textfilter berücksichtigt die Art ebenfalls (z. B. `arbitration` oder `publicfolder`). Die Hinweiszeile nennt die gerade geladene Postfachart.
 
-### Geändert
-- **Auswahl-Schluessel.** Jedes Postfach liefert zusätzlich das Feld
-  `Schluessel` (zuerst SMTP-Adresse, dann Alias, Anzeigename, DN).
-  Sonderpostfächer haben oft keine eigene SMTP-Adresse – ohne Rückfall wäre
-  der Auswahlwert leer gewesen und alle betroffenen Postfächer gehörten zu
-  **einem** Häkchen, verschoben worden wäre nur eines. `New-MoveRequest
-  -Identity` akzeptiert alle vier Formen.
-- `/api/benutzer` akzeptiert `?typ=` mit `benutzer` / `sonder` / `alle`
-  (unbekannte Werte fallen auf `benutzer` zurück) und liefert je Postfach
-  zusätzlich `Typ` und `Schluessel`.
+### Geändert / Changed
+- **Auswahl-Schluessel / Selection Key.** Jedes Postfach liefert zusätzlich das Feld `Schluessel` (zuerst SMTP-Adresse, dann Alias, Anzeigename, DN). Sonderpostfächer haben oft keine eigene SMTP-Adresse – ohne Rückfall wäre der Auswahlwert leer gewesen und alle betroffenen Postfächer gehörten zu **einem** Häkchen, verschoben worden wäre nur eines. `New-MoveRequest -Identity` akzeptiert alle vier Formen.
+- `/api/benutzer` akzeptiert `?typ=` mit `benutzer` / `sonder` / `alle` (unbekannte Werte fallen auf `benutzer` zurück) und liefert je Postfach zusätzlich `Typ` und `Schluessel`.
 
-### Getestet
-- 64 neue Prüfungen. `test_sonderpostfaecher.ps1` (42): Klassifizierung aus
-  `RecipientTypeDetails` inkl. `AuxAuditLog`-Gegenprobe (darf nicht als
-  `AuditLog` landen), alle drei Filterstufen, Quell-Datenbank-Filter,
-  Schlüssel-Rückfall ohne SMTP, laufende MoveRequests, `ValidateSet` und der
-  leere Fall (`[]` statt `null` in der API). `test_postfachart.js` (22):
-  URL-Bau inkl. URL-Codierung, Schlüssel-Rückfall, Anzeigetext und der
-  Postfachfilter.
+### Getestet / Tested
+- 64 neue Prüfungen. `test_sonderpostfaecher.ps1` (42): Klassifizierung aus `RecipientTypeDetails` inkl. `AuxAuditLog`-Gegenprobe (darf nicht als `AuditLog` landen), alle drei Filterstufen, Quell-Datenbank-Filter, Schlüssel-Rückfall ohne SMTP, laufende MoveRequests, `ValidateSet` und der leere Fall (`[]` statt `null` in der API). `test_postfachart.js` (22): URL-Bau inkl. URL-Codierung, Schlüssel-Rückfall, Anzeigetext und der Postfachfilter.
+
+---
 
 ## [2.9] – 09.10.2026
 
-### Behoben
-- **Fehlwarnung beim Stoppen über die Seite.** Der Klick auf „Server stoppen" bricht die gerade
-  laufende Browser-Anfrage ab, während das Skript in deren Response-Stream schreibt. Das ergab:
+### Behoben / Fixed
+- **Fehlwarnung beim Stoppen über die Seite / False warning when stopping via page.** Der Klick auf „Server stoppen" / „Stop server" bricht die gerade laufende Browser-Anfrage ab, während das Skript in deren Response-Stream schreibt. Das ergab:
 
   ```text
   [WARNUNG] HTTP-Listener Fehler: Ausnahme beim Aufrufen von "Write" mit 3 Argument(en): "Der angegebene Netzwerkname ist nicht mehr verfügbar"
@@ -201,235 +117,164 @@ Die Versionierung folgt `MAJOR.MINOR` – das Skript führt die Versionsnummer i
   [INFO] HTTP-Server sauber heruntergefahren.
   ```
 
-  Der Stopp selbst funktioniert einwandfrei – die Warnung war also rein kosmetisch, wirkte aber
-  wie ein Fehler.
-- Neue Funktion **`Test-BrowserVerbindungsabbruch`** erkennt Client-Abbrüche an der
-  Exception-Kette (PowerShell liefert die `HttpListenerException` als Wrapper mit
-  `InnerException`) an den Win32-Codes 64, 995, 1225, 1236, 10053, 10054 und 10058 bzw. am
-  Meldungstext. Solche Fälle werden als `STILL` protokolliert – nur in die Datei, nicht auf die
-  Konsole:
+  Der Stopp selbst funktioniert einwandfrei – die Warnung war also rein kosmetisch, wirkte aber wie ein Fehler.
+- Neue Funktion **`Test-BrowserVerbindungsabbruch`** erkennt Client-Abbrüche an der Exception-Kette (PowerShell liefert die `HttpListenerException` als Wrapper mit `InnerException`) an den Win32-Codes 64, 995, 1225, 1236, 10053, 10054 und 10058 bzw. am Meldungstext. Solche Fälle werden als `STILL` protokolliert – nur in die Datei, nicht auf die Konsole:
 
   ```text
   [STILL] Verbindung vom Browser geschlossen - Anfrage abgebrochen (beim Stoppen oder Schliessen des Tabs ganz normal).
+  [STILL] Browser connection closed - request aborted (when stopping or closing tab – perfectly normal).
   ```
 
   Echte Listener-Fehler bleiben eine WARNUNG, etwa „Zugriff verweigert" (5) oder 10061.
 
-### Getestet
-- 17 neue Prüfungen (`test_stop_log.ps1`): der konkrete Praxisfall (Win32 64, auch als Wrapper
-  mit `InnerException` und als `MethodInvocationException`), weitere Abbruchcodes, nur der
-  Meldungstext – sowie die Gegenprobe, dass „Zugriff verweigert", 10061 und sonstige
-  Exceptionen weiterhin als Fehler erkannt werden.
+### Getestet / Tested
+- 17 neue Prüfungen (`test_stop_log.ps1`): der konkrete Praxisfall (Win32 64, auch als Wrapper mit `InnerException` und als `MethodInvocationException`), weitere Abbruchcodes, nur der Meldungstext – sowie die Gegenprobe, dass „Zugriff verweigert", 10061 und sonstige Exceptionen weiterhin als Fehler erkannt werden.
+
+---
 
 ## [2.8] – 08.10.2026
 
-### Behoben
-- **Fehler 32 beim Start (`Die angegebene Adresse ist bereits in Verwendung`).** Die Port-Prüfung
-  lief nur *einmal*, und zwar **vor** Snap-In und erster Sammlung. In diesem rund 11‑sekündigen
-  Fenster (Praxistest: Port um 12:00:22 noch frei, um 12:00:33 von einer zweiten Instanz belegt)
-  konnte das URL-Praefix gewechseln, sodass `$Listener.Start()` mit Fehler 32 scheiterte.
-  Jetzt wird die Prüfung mit der neuen Funktion `Resolve-DashboardPortKonflikt` erneut **unmittelbar
-  vor jedem Startversuch** ausgeführt – und nach einem Fehler 32 wird **einmal nachgelegt**
-  (höchstens 3 Versuche, mit frischem `HttpListener` pro Versuch). Ohne `-KeinAutoStopp` wird nicht
-  nachgelegt, damit sich zwei Instanzen nicht gegenseitig beenden (`Ping-Pong`).
-- **Fehlwarnung „Es läuft bereits eine weitere Dashboard-Instanz".** `return , $Treffer` lieferte dem
-  Aufrufer ein Array mit *einem* leeren Element; mit der `@()`-Umbruchung entstand daraus eine Instanz
-  ohne Felder – sichtbar als die leere Logzeile `PID  (), Port :`. Die Komma-Wraps in
-  `Get-DashboardProzess`, `Get-LaufendeDashboardInstanzen` und `Get-PortDiagnose` sind entfernt.
-- **Light-Zeilen zählten als „offen".** Im Light-Modus wurde `DetailOffen` trotz endgültiger Zeile
-  erhöht, wodurch das Dashboard dauerhaft im Nachhol-Modus geblieben wäre.
+### Behoben / Fixed
+- **Fehler 32 beim Start (`Die angegebene Adresse ist bereits in Verwendung` / `The specified address is already in use`).** Die Port-Prüfung lief nur *einmal*, und zwar **vor** Snap-In und erster Sammlung. In diesem rund 11‑sekündigen Fenster (Praxistest: Port um 12:00:22 noch frei, um 12:00:33 von einer zweiten Instanz belegt) konnte das URL-Praefix gewechseln, sodass `$Listener.Start()` mit Fehler 32 scheiterte. Jetzt wird die Prüfung mit der neuen Funktion `Resolve-DashboardPortKonflikt` erneut **unmittelbar vor jedem Startversuch** ausgeführt – und nach einem Fehler 32 wird **einmal nachgelegt** (höchstens 3 Versuche, mit frischem `HttpListener` pro Versuch). Ohne `-KeinAutoStopp` wird nicht nachgelegt, damit sich zwei Instanzen nicht gegenseitig beenden (`Ping-Pong`).
+- **Fehlwarnung „Es läuft bereits eine weitere Dashboard-Instanz" / False warning "Another dashboard instance is already running".** `return , $Treffer` lieferte dem Aufrufer ein Array mit *einem* leeren Element; mit der `@()`-Umbruchung entstand daraus eine Instanz ohne Felder – sichtbar als die leere Logzeile `PID  (), Port :`. Die Komma-Wraps in `Get-DashboardProzess`, `Get-LaufendeDashboardInstanzen` und `Get-PortDiagnose` sind entfernt.
+- **Light-Zeilen zählten als „offen" / Light rows counted as "pending".** Im Light-Modus wurde `DetailOffen` trotz endgültiger Zeile erhöht, wodurch das Dashboard dauerhaft im Nachhol-Modus geblieben wäre.
 
-### Neu
-- **Parameter `-Light` (Alias `-NurStatus`).** Liefert nur den Status der Verschiebeanforderungen –
-  Anzeigename, Status, Quell-/Ziel-Datenbank und Batch. `Get-MoveRequestStatistics` wird
-  **vollständig ausgelassen**, das ist der eigentliche Geschwindigkeitsgewinn; die Sammlung bleibt
-  bei den Grunddaten aus `Get-MoveRequest`. Die technischen Spalten (Statusdetail, Fortschritt,
-  Übertragen, Gesamtgröße, Items, Bad Items, Start, Abschluss) werden per CSS
-  (`.spalte-technisch`) ausgeblendet, die Fußzeile zeigt `Light-Modus`. Resume-/Löschen-Buttons
-  und die Mehrfachauswahl bleiben voll funktionsfähig.
+### Neu / New
+- **Parameter `-Light` (Alias `-NurStatus`).** Liefert nur den Status der Verschiebeanforderungen – Anzeigename, Status, Quell-/Ziel-Datenbank und Batch. `Get-MoveRequestStatistics` wird **vollständig ausgelassen**, das ist der eigentliche Geschwindigkeitsgewinn; die Sammlung bleibt bei den Grunddaten aus `Get-MoveRequest`. Die technischen Spalten (Statusdetail, Fortschritt, Übertragen, Gesamtgröße, Items, Bad Items, Start, Abschluss) werden per CSS (`.spalte-technisch`) ausgeblendet, die Fußzeile zeigt `Light-Modus` / `Light mode`. Resume-/Löschen-Buttons und die Mehrfachauswahl bleiben voll funktionsfähig.
 - Die Start-Protokollzeile nennt den Light-Modus, die `.NOTES` dokumentieren den Ablauf.
 
-### Getestet
-- 54 Prüfungen neu (`test_light_start.ps1`): Phantom-Zählung, `Resolve-DashboardPortKonflikt`
-  (freier Port, fremder Dienst, `-KeinAutoStopp`, Auto-Stopp mit freiem Präfix), `New-Grundzeile`
-  mit/ohne `-Light`, Sammlung mit und ohne Statistikabrufe sowie das generierte HTML
-  (CSS-Regel, Spaltenklassen, Fußzeile).
-- Wiederholt: Auto-Stopp 11/11, Move-Aktion 18/18, Frontend-Auswahl 38/38, PS-Syntax, UTF‑8-BOM,
-  `node --check`.
+### Getestet / Tested
+- 54 Prüfungen neu (`test_light_start.ps1`): Phantom-Zählung, `Resolve-DashboardPortKonflikt` (freier Port, fremder Dienst, `-KeinAutoStopp`, Auto-Stopp mit freiem Präfix), `New-Grundzeile` mit/ohne `-Light`, Sammlung mit und ohne Statistikabrufe sowie das generierte HTML (CSS-Regel, Spaltenklassen, Fußzeile).
+- Wiederholt: Auto-Stopp 11/11, Move-Aktion 18/18, Frontend-Auswahl 38/38, PS-Syntax, UTF‑8-BOM, `node --check`.
+
+---
 
 ## [2.7] – 08.10.2026
 
-### Neu
-- **Mehrfachauswahl suspendierter Anforderungen.** Jede Tabellenzeile mit Status `Suspended`
-  (`-SuspendWhenReadyToComplete`) oder `AutoSuspended` hat neben dem Einzel-Button von v2.4
-  jetzt ein **Auswahlfeld**. Darüber erscheint eine Leiste mit:
-  - **„Alle sichtbaren auswählen"** – nur die Zeilen, die der Suchfilter gerade zeigt,
-    **„Auswahl abschließen"** – mit Zähler, führt die Auswahl mit *einem* Klick aus,
-  - **„Auswahl aufheben"**.
+### Neu / New
+- **Mehrfachauswahl suspendierter Anforderungen / Multi-select suspended requests.** Jede Tabellenzeile mit Status `Suspended` (`-SuspendWhenReadyToComplete`) oder `AutoSuspended` hat neben dem Einzel-Button von v2.4 jetzt ein **Auswahlfeld**. Darüber erscheint eine Leiste mit:
+  - **„Alle sichtbaren auswählen" / „Select all visible"** – nur die Zeilen, die der Suchfilter gerade zeigt,
+  - **„Auswahl abschließen" / „Complete selection"** – mit Zähler, führt die Auswahl mit *einem* Klick aus,
+  - **„Auswahl aufheben" / „Clear selection"**.
+  Die Auswahl überlebt den Tabelle-Render (der bei jedem Poll komplett neu gebaut wird) und wird aufgeräumt, sobald eine Anforderung nicht mehr suspendiert ist – es bleibt kein Geisterhaken stehen. Während ein Auftrag läuft, sind die Schalter gesperrt.
+- **`/api/move-aktion` akzeptiert `Identities` als Array.** Daraus entsteht **ein** Hintergrund-Auftrag, der die Auswahl der Reihe nach fortsetzt – ein Fortschrittsbalken statt eines Requests pro Zeile. Auswahlregel: `Identities` → `Identity` → `Alle` → `BatchName`.
+- Identities, die sich nicht auflösen lassen (z. B. zwischenzeitlich abgeschlossene Anforderungen), werden protokolliert und übersprungen; der Rest der Auswahl läuft trotzdem.
+- `Start-MoveAktion` arbeitet intern mit `$ZielIds` (dedupliziert, Leer-Einträge entfernt). Der Einzelweg über `Identity` bleibt unverändert erhalten.
+- Das Wiki wurde korrigiert: die Werte von `Aktion` heißen `Resume`/`Entfernen` (das Beispiel mit `remove` funktionierte nicht).
 
-  Die Auswahl überlebt den Tabelle-Render (der bei jedem Poll komplett neu gebaut wird) und
-  wird aufgeräumt, sobald eine Anforderung nicht mehr suspendiert ist – es bleibt kein
-  Geisterhaken stehen. Während ein Auftrag läuft, sind die Schalter gesperrt.
-- **`/api/move-aktion` akzeptiert `Identities` als Array.** Daraus entsteht **ein**
-  Hintergrund-Auftrag, der die Auswahl der Reihe nach fortsetzt – ein Fortschrittsbalken
-  statt eines Requests pro Zeile. Auswahlregel: `Identities` → `Identity` → `Alle` → `BatchName`.
-- Identities, die sich nicht auflösen lassen (z. B. zwischenzeitlich abgeschlossene
-  Anforderungen), werden protokolliert und übersprungen; der Rest der Auswahl läuft trotzdem.
-- `Start-MoveAktion` arbeitet intern mit `$ZielIds` (dedupliziert, Leer-Einträge entfernt).
-  Der Einzelweg über `Identity` bleibt unverändert erhalten.
-- Das Wiki wurde korrigiert: die Werte von `Aktion` heißen `Resume`/`Entfernen`
-  (das Beispiel mit `remove` funktionierte nicht).
+### Getestet / Tested
+- 18 Prüfungen gegen `Start-MoveAktion` mit Stubs statt Exchange (Einzel-/Mehrfachziel, fehlende Identities, Dubletten, Fehlermeldungen).
+- 38 Prüfungen der Frontend-Auswahl-Logik gegen einen DOM-Stub (Render-Überleben, Filter, Prune bei Statuswechsel, Sperren während laufender Aktion).
 
-### Getestet
-- 18 Prüfungen gegen `Start-MoveAktion` mit Stubs statt Exchange (Einzel-/Mehrfachziel,
-  fehlende Identities, Dubletten, Fehlermeldungen).
-- 38 Prüfungen der Frontend-Auswahl-Logik gegen einen DOM-Stub (Render-Überleben, Filter,
-  Prune bei Statuswechsel, Sperren während laufender Aktion).
+---
 
 ## [2.6] – 08.10.2026
 
-### Neu
-- **Andere Instanz wird beim Start automatisch beendet.** Startet das Skript, während auf
-  demselben Port bereits ein Dashboard läuft, wird diese Instanz jetzt *bevor* Zeit in
-  Snap-In und erste Sammlung fließt beendet – der klassische Fehler 32 tritt gar nicht mehr auf.
-  Ablauf in dieser Reihenfolge:
-  1. **HTTP-Prüfung** (`Test-DashboardAntwort`) – sieht auch eine in einer *offenen Konsole*
-     gestartete Instanz. Deren `powershell.exe` trägt den Skriptnamen nicht in der Kommandozeile,
-     eine reine Prozesssuche findet sie also nicht – und genau dieser Listener hält das
-     URL-Präfix, das dem eigenen Start fehlt.
-  2. **Sauberer Stopp** über die fremde `/api/stop`-Route (`Stop-AnderesDashboard`): die alte
-     Instanz schließt ihren HttpListener und gibt das Präfix frei. Der Prozess selbst darf
-     weiterleben (offener Konsolen-Prompt) – gehalten wurde nur das Präfix.
-  3. **Harter Stopp** per `Stop-Process` – ausschließlich bei Prozessen mit Skriptnamen *und*
-     genau diesem Port, und nur wenn Schritt 2 nicht reichte.
+### Neu / New
+- **Andere Instanz wird beim Start automatisch beendet / Other instance auto-stopped at start.** Startet das Skript, während auf demselben Port bereits ein Dashboard läuft, wird diese Instanz jetzt *bevor* Zeit in Snap-In und erste Sammlung fließt beendet – der klassische Fehler 32 tritt gar nicht mehr auf. Ablauf in dieser Reihenfolge:
+  1. **HTTP-Prüfung** (`Test-DashboardAntwort`) – sieht auch eine in einer *offenen Konsole* gestartete Instanz. Deren `powershell.exe` trägt den Skriptnamen nicht in der Kommandozeile, eine reine Prozesssuche findet sie also nicht – und genau dieser Listener hält das URL-Präfix, das dem eigenen Start fehlt.
+  2. **Sauberer Stopp** über die fremde `/api/stop`-Route (`Stop-AnderesDashboard`): die alte Instanz schließt ihren HttpListener und gibt das Präfix frei. Der Prozess selbst darf weiterleben (offener Konsolen-Prompt) – gehalten wurde nur das Präfix.
+  3. **Harter Stopp** per `Stop-Process` – ausschließlich bei Prozessen mit Skriptnamen *und* genau diesem Port, und nur wenn Schritt 2 nicht reichte.
   4. **Abbruch mit Hinweisen**, wenn das Präfix blockiert bleibt (manuelle Suche, anderer Port).
-- Neuer Parameter **`-KeinAutoStopp`** – deaktiviert das automatische Beenden, das Skript
-  begnügt sich dann mit einer Warnung im Log.
-- Instanzen auf *anderen* Ports bleiben unberührt, fremde Dienste auf dem Start-Port werden
-  als solche erkannt und protokolliert.
-- Neue Hilfsfunktionen `Get-DashboardProzess`, `Test-DashboardAntwort` und
-  `Stop-AnderesDashboard`. Die bisherige `Get-LaufendeDashboardInstanzen` liefert weiterhin
-  dieselben Textzeilen fürs Log – sie baut jetzt auf `Get-DashboardProzess` auf.
+- Neuer Parameter **`-KeinAutoStopp`** – deaktiviert das automatische Beenden, das Skript begnügt sich dann mit einer Warnung im Log.
+- Instanzen auf *anderen* Ports bleiben unberührt, fremde Dienste auf dem Start-Port werden als solche erkannt und protokolliert.
+- Neue Hilfsfunktionen `Get-DashboardProzess`, `Test-DashboardAntwort` und `Stop-AnderesDashboard`. Die bisherige `Get-LaufendeDashboardInstanzen` liefert weiterhin dieselben Textzeilen fürs Log – sie baut jetzt auf `Get-DashboardProzess` auf.
+
+---
 
 ## [2.5] – 08.10.2026
 
-### Geändert
-- **Diagnose beim Startfehler des Webservers.** Bisher endete ein scheiternder
-  `$Listener.Start()` nur mit dem Win32-Text *„Der Prozess kann nicht auf die Datei zugreifen,
-  da sie von einem anderen Prozess verwendet wird"* (Fehler 32). Das Log nennt jetzt:
-  - die Ursache (URL-Präfix `http://localhost:<Port>/` war schon vergeben – fast immer ein
-    zweites Dashboard, auch die alte Skript-Version),
+### Geändert / Changed
+- **Diagnose beim Startfehler des Webservers / Diagnostics on web server start failure.** Bisher endete ein scheiternder `$Listener.Start()` nur mit dem Win32-Text *„Der Prozess kann nicht auf die Datei zugreifen, da sie von einem anderen Prozess verwendet wird"* (Fehler 32). Das Log nennt jetzt:
+  - die Ursache (URL-Präfix `http://localhost:<Port>/` war schon vergeben – fast immer ein zweites Dashboard, auch die alte Skript-Version),
   - **alle zum Fehlerzeitpunkt laufenden Dashboard-Prozesse** (PID, Name, Kommandozeile),
   - die Port-Listener (PID/Prozess) und die URL-Reservierungen aus `netsh`,
   - drei Abhilfen (andere Instanz beenden, anderer Port, Nachweis-Befehle).
+  Entscheidend ist der **Zeitpunkt**: Ein Port-Check *nach* dem Fehler findet nichts mehr, weil die gescheiterte Registrierung sofort wieder freigegeben wird – die Spur ist dann kalt.
 
-  Entscheidend ist der **Zeitpunkt**: Ein Port-Check *nach* dem Fehler findet nichts mehr,
-  weil die gescheiterte Registrierung sofort wieder freigegeben wird – die Spur ist dann kalt.
-
-### Neu
-- Beim Start werden weitere laufende Dashboard-Prozesse gesucht und bei Treffern protokolliert
-  (Warnung vor dem bekannten Fehler-32-Fall).
+### Neu / New
+- Beim Start werden weitere laufende Dashboard-Prozesse gesucht und bei Treffern protokolliert (Warnung vor dem bekannten Fehler-32-Fall).
 - Neue Hilfsfunktionen `Get-LaufendeDashboardInstanzen` und `Get-PortDiagnose`.
+
+---
 
 ## [2.4] – 08.10.2026
 
-### Neu
-- **Button „Abschließen" pro suspendierter Anforderung** – direkt hinter jeder Tabellenzeile
-  mit Status `Suspended` (`-SuspendWhenReadyToComplete`) **oder** `AutoSuspended`
-  (automatisches Anhalten). Er startet `Resume-MoveRequest` für genau diese eine Anforderung –
-  nicht für den ganzen Batch. Sobald sich der Status ändert, verschwindet der Button automatisch.
-- **`/api/move-aktion` akzeptiert `Identity`** einer einzelnen Anforderung – neben `BatchName`
-  und `Alle`. Die Identity kommt aus der Detailzeile, dadurch wird genau der angezeigte Job
-  fortgesetzt.
+### Neu / New
+- **Button „Abschließen" / „Complete" pro suspendierter Anforderung** – direkt hinter jeder Tabellenzeile mit Status `Suspended` (`-SuspendWhenReadyToComplete`) **oder** `AutoSuspended` (automatisches Anhalten). Er startet `Resume-MoveRequest` für genau diese eine Anforderung – nicht für den ganzen Batch. Sobald sich der Status ändert, verschwindet der Button automatisch.
+- **`/api/move-aktion` akzeptiert `Identity`** einer einzelnen Anforderung – neben `BatchName` und `Alle`. Die Identity kommt aus der Detailzeile, dadurch wird genau der angezeigte Job fortgesetzt.
 
-### Geändert
-- Detailzeilen liefern die `Identity` des MoveRequests mit (Grundzeilen, Fehlerzeilen und
-  gecachte Volldaten) – Voraussetzung für das Einzelziel.
-- Der Auftrag einer Einzel-Aktion trägt keine Batch-Kennung mehr, damit am Auftrag kein
-  Batch-Button erscheint, der fälschlich den ganzen Batch fortsetzen würde.
+### Geändert / Changed
+- Detailzeilen liefern die `Identity` des MoveRequests mit (Grundzeilen, Fehlerzeilen und gecachte Volldaten) – Voraussetzung für das Einzelziel.
+- Der Auftrag einer Einzel-Aktion trägt keine Batch-Kennung mehr, damit am Auftrag kein Batch-Button erscheint, der fälschlich den ganzen Batch fortsetzen würde.
+
+---
 
 ## [2.3] – 07.10.2026
 
-### Neu
-- **Schneller Erstablauf** – der erste Lauf liefert nur die Grunddaten aus `Get-MoveRequest`
-  (Sekunden statt Minuten); die Statistikdetails kommen im nächsten Lauf nach. Bis dahin zeigt die
-  Fortschrittsspalte `...` statt einer scheinbaren 0 % (`DetailOffen`).
-- **Parallele Statistikabrufe** über einen Runspace-Pool (`-Parallelitaet`, Standard 4). Bei 300
-  laufenden Jobs war das der Hauptengpass: sequenzielle Abrufe hielten die Request-Queue Minuten
-  lang blockiert.
-- **`-MaxDetailAbrufe`** begrenzt die Statistikabrufe je Sammlung (`0` = unbegrenzt). Offene
-  Details werden zuerst nachgeholt, damit kein Job durch die Grenze dauerhaft übergeht.
+### Neu / New
+- **Schneller Erstablauf / Faster initial run** – der erste Lauf liefert nur die Grunddaten aus `Get-MoveRequest` (Sekunden statt Minuten); die Statistikdetails kommen im nächsten Lauf nach. Bis dahin zeigt die Fortschrittsspalte `...` statt einer scheinbaren 0 % (`DetailOffen`).
+- **Parallele Statistikabrufe / Parallel stats fetches** über einen Runspace-Pool (`-Parallelitaet`, Standard 4). Bei 300 laufenden Jobs war das der Hauptengpass: sequenzielle Abrufe hielten die Request-Queue Minuten lang blockiert.
+- **`-MaxDetailAbrufe`** begrenzt die Statistikabrufe je Sammlung (`0` = unbegrenzt). Offene Details werden zuerst nachgeholt, damit kein Job durch die Grenze dauerhaft übergeht.
 
-### Geändert
-- Das Lade-Overlay blendet ab, sobald die Dashboard-Tabelle da ist – Postfächer und Detaildaten
-  laufen dann im Hintergrund weiter (v2.2 wartete auf alles).
+### Geändert / Changed
+- Das Lade-Overlay blendet ab, sobald die Dashboard-Tabelle da ist – Postfächer und Detaildaten laufen dann im Hintergrund weiter (v2.2 wartete auf alles).
+
+---
 
 ## [2.2] – 07.10.2026
 
-### Neu
-- **WebGUI-Bereich „Neue Verschiebeanforderung"** – Postfächer einer Quelldatenbank auswählen,
-  Quell- und Ziel-Datenbank wählen, Start durchgehend oder mit `-SuspendWhenReadyToComplete`.
-  Die Erstellung läuft in einem eigenen Hintergrund-Job, das Dashboard bleibt bedienbar.
-- **Alle Postfächer ohne Quelldatenbank** – ohne Quell-Datenbank werden alle Postfächer aller
-  Datenbanken angezeigt, die Zugehörigkeit steht rechts in der Zeile (auch mitgefiltert).
-- **Vorab-Prüfung der Ziel-Datenbank** (existent und gemountet). Die Systemmailbox-Prüfung wurde
-  wieder entfernt – sie hat den Start normaler Verschiebungen fälschlich blockiert.
-- **Auswahlfeld Priorität** (`-Priority`: Low/Normal/High/Critical/Emergency). Die Quelldatenbank
-  darf leer bleiben, dann werden alle ausgewählten Postfächer verschoben.
-- **Vorabtest mit `-WhatIf`** (aus / erst prüfen dann verschieben / nur prüfen). Im „nur prüfen"-
-  Modus entstehen keine MoveRequests.
+### Neu / New
+- **WebGUI-Bereich „Neue Verschiebeanforderung" / "New Move Request"** – Postfächer einer Quelldatenbank auswählen, Quell- und Ziel-Datenbank wählen, Start durchgehend oder mit `-SuspendWhenReadyToComplete`. Die Erstellung läuft in einem eigenen Hintergrund-Job, das Dashboard bleibt bedienbar.
+- **Alle Postfächer ohne Quelldatenbank / All mailboxes without source DB** – ohne Quell-Datenbank werden alle Postfächer aller Datenbanken angezeigt, die Zugehörigkeit steht rechts in der Zeile (auch mitgefiltert).
+- **Vorab-Prüfung der Ziel-Datenbank / Pre-check target database** (existent und gemountet). Die Systemmailbox-Prüfung wurde wieder entfernt – sie hat den Start normaler Verschiebungen fälschlich blockiert.
+- **Auswahlfeld Priorität / Priority selector** (`-Priority`: Low/Normal/High/Critical/Emergency). Die Quelldatenbank darf leer bleiben, dann werden alle ausgewählten Postfächer verschoben.
+- **Vorabtest mit `-WhatIf`** (aus / erst prüfen dann verschieben / nur prüfen). Im „nur prüfen"-Modus / „check only" mode entstehen keine MoveRequests.
 - **Auswahlfeld BadItemLimit** (0/1/10/20/50/100) für `-BadItemLimit`.
-- **Lade-Overlay** zeigt Text und zählt die geladenen Postfächer hoch; es bleibt stehen, bis
-  Dashboard-Daten *und* Postfächer da sind.
-- **Suspendierte Anforderungen nachziehen** – Button „Suspendierte abschließen" pro Batch und
-  global „Alle suspendierten abschließen" (`Resume-MoveRequest` als Hintergrund-Job, Fortschritt
-  über `/api/move-status`).
-- **Abgeschlossene Anforderungen löschen** – Buttons pro Auftrag und global „Alle abgeschlossenen
-  löschen" (`Remove-MoveRequest` berührt nur die MoveRequest-Einträge). Neue Route
-  `/api/move-aktion`.
+- **Lade-Overlay** zeigt Text und zählt die geladenen Postfächer hoch; es bleibt stehen, bis Dashboard-Daten *und* Postfächer da sind.
+- **Suspendierte Anforderungen nachziehen / Resume suspended** – Button „Suspendierte abschließen" / „Complete suspended" pro Batch und global „Alle suspendierten abschließen" / „Complete all suspended" (`Resume-MoveRequest` als Hintergrund-Job, Fortschritt über `/api/move-status`).
+- **Abgeschlossene Anforderungen löschen / Delete completed** – Buttons pro Auftrag und global „Alle abgeschlossenen löschen" / „Delete all completed" (`Remove-MoveRequest` berührt nur die MoveRequest-Einträge). Neue Route `/api/move-aktion`.
 
-### Behoben
-- Überflüssiges `-Confirm` entfernt (`New-*`-Cmdlets fragen nicht nach). Die Darstellung
-  „-SuspendWhenReadyToComplete True" im Cmdlet-Log ist korrekt und war nie die Fehlerursache.
+### Behoben / Fixed
+- Überflüssiges `-Confirm` entfernt (`New-*`-Cmdlets fragen nicht nach). Die Darstellung „-SuspendWhenReadyToComplete True" im Cmdlet-Log ist korrekt und war nie die Fehlerursache.
+
+---
 
 ## [2.1] – 07.10.2026
 
-### Behoben
-- Statistik-Cache nutzte `ExchangeObjectId` als Schlüssel (leer/nicht eindeutig) – alle
-  Completed-Jobs zeigten dieselbe Zeile. Schlüssel ist jetzt `Identity`/`RequestGuid`, Fallback
-  `DisplayName`+`BatchName`, mit Selbstheilung bei Kollision.
+### Behoben / Fixed
+- Statistik-Cache nutzte `ExchangeObjectId` als Schlüssel (leer/nicht eindeutig) – alle Completed-Jobs zeigten dieselbe Zeile. Schlüssel ist jetzt `Identity`/`RequestGuid`, Fallback `DisplayName`+`BatchName`, mit Selbstheilung bei Kollision.
 
-### Geändert
-- Spalten „Übertragen"/„Gesamtgröße" zeigen nur noch ganze MB/GB
-  (`2 GB` statt `1.834 GB (1,969,304,264 bytes)`).
+### Geändert / Changed
+- Spalten „Übertragen"/„Gesamtgröße" / "Transferred"/"Total size" zeigen nur noch ganze MB/GB (`2 GB` statt `1.834 GB (1,969,304,264 bytes)`).
 - Datei auf UTF-8 mit BOM umgestellt, damit Umlaute unter PowerShell 5.1 korrekt gelesen werden.
+
+---
 
 ## [2.0] – 07.10.2026
 
-Stabilitätskern – Behebung des Totalausfalls nach wenigen Minuten bei vielen Jobs.
+Stabilitätskern – Behebung des Totalausfalls nach wenigen Minuten bei vielen Jobs. / Stability core – fix for total crash after a few minutes with many jobs.
 
-### Behoben
-- `Response.OutputStream.Close()` stand außerhalb des `finally` – jeder fehlgeschlagene Request
-  leckte eine TCP-Verbindung, nach ~10 Minuten war der Port dicht.
-- `setInterval(async)` stapelte Requests. Ersetzt durch eine selbstkorrigierende `setTimeout`-Kette
-  mit `AbortController` und In-Flight-Sperre.
+### Behoben / Fixed
+- `Response.OutputStream.Close()` stand außerhalb des `finally` – jeder fehlgeschlagene Request leckte eine TCP-Verbindung, nach ~10 Minuten war der Port dicht.
+- `setInterval(async)` stapelte Requests. Ersetzt durch eine selbstkorrigierende `setTimeout`-Kette mit `AbortController` und In-Flight-Sperre.
 - `$_` im `catch`-Block ist der `ErrorRecord`, nicht der MoveRequest – Fehlermeldungen waren leer.
 - `"$var.Property"` interpoliert in PowerShell nicht die Property, sondern den Wert plus Literaltext.
 - Cache-TTL war am Sammlungsanfang statt -ende verankert, der Schnellpfad konnte nie greifen.
 - Jobs mit fehlgeschlagener Statistik fielen aus der Tabelle (Gesamt 235, Tabelle 226).
-- `Get-StatusFarbe`/`Get-StatusPrioritaet` waren `Mandatory` und warfen bei leerem Status, obwohl
-  darunter ein Fallback lag – ein solcher Job hat die komplette Sammlung gekillt (0 Zeilen).
+- `Get-StatusFarbe`/`Get-StatusPrioritaet` waren `Mandatory` und warfen bei leerem Status, obwohl darunter ein Fallback lag – ein solcher Job hat die komplette Sammlung gekillt (0 Zeilen).
 
-### Neu
+### Neu / New
 - Snapshot-Cache: überlappende Requests werden sofort beantwortet (19 s → 0,03 s).
 - `Get-MoveRequestStatistics` nur noch für aktive Jobs, Endzustände gecacht (235 → 188 Abrufe).
-- Stale-Snapshot bei Sammlungsfehler statt „Keine MoveRequests vorhanden".
+- Stale-Snapshot bei Sammlungsfehler statt „Keine MoveRequests vorhanden" / "No MoveRequests found".
 - Dauerhaft offener `StreamWriter` statt `Add-Content` pro Zeile, Rate-Limiting und Log-Rotation.
 - Parameter `-CacheIntervall`, `-AbfrageTimeout`, `-LeerlaufIntervall`, `-BatchName`, `-KeinBrowser`.
 - Zeilen ohne Statistik werden markiert statt unterschlagen.
 
+---
+
 ## [1.0] – 26.02.2026
 
-### Neu
-- Initiale Version: Live-Dashboard mit Mini-Webserver, automatischer Aktualisierung ohne
-  Seiten-Reload und priorisierter Darstellung aktiver Jobs.
+### Neu / New
+- Initiale Version: Live-Dashboard mit Mini-Webserver, automatischer Aktualisierung ohne Seiten-Reload und priorisierter Darstellung aktiver Jobs. / Initial version: Live dashboard with mini web server, automatic refresh without page reload, and prioritized display of active jobs.

@@ -432,9 +432,593 @@ param(
     [Alias("NurStatus")]
     [switch]$Light,
 
-    [Parameter(Mandatory = $false, HelpMessage = "Update-Check gegen die GitLab-Releases-API unterdruecken (Airgap/Offline)")]
-    [switch]$KeinUpdateCheck
+    [Parameter(Mandatory = $false, HelpMessage = "Update-Check gegen die GitLab-Releases-API unterdruecken (Airgap/Offline) / suppress update check")]
+    [switch]$KeinUpdateCheck,
+
+    [Parameter(Mandatory = $false, HelpMessage = "Sprache der Oberflaeche: Auto (Betriebssystem), de oder en (Standard: Auto) / UI language: Auto (OS), de or en")]
+    [ValidateSet("Auto", "de", "en")]
+    [Alias("Language")]
+    [string]$Sprache = "Auto"
 )
+
+# ============================================================================
+# Region: Sprache / Localization (v2.16)
+# ============================================================================
+# Die Oberflaeche ist zweisprachig. Ohne -Sprache wird die Sprache des
+# Betriebssystems verwendet (deutsches Windows -> Deutsch, sonst Englisch).
+# Der Umschalter in der Web-Oberflaeche setzt ein Cookie und laedt die Seite
+# mit ?lang=de bzw. ?lang=en neu. Damit folgen auch alle vom Server erzeugten
+# Meldungen (Validierung, Auftragsstatus, Log) der gewaehlten Sprache.
+
+function Get-StandardSprache {
+    if ($env:EXCHANGE_DASHBOARD_LANG -in @('de', 'en')) {
+        return [string]$env:EXCHANGE_DASHBOARD_LANG
+    }
+
+    try {
+        $Kultur = [System.Globalization.CultureInfo]::CurrentUICulture
+        if ($Kultur -and $Kultur.TwoLetterISOLanguageName -eq 'de') { return 'de' }
+    }
+    catch { }
+
+    return 'en'
+}
+
+function ConvertTo-SprachTabelle {
+    param([AllowEmptyString()][string]$RohText)
+
+    $Tabelle = @{}
+    foreach ($Zeile in ($RohText -split "`r?`n")) {
+        if ([string]::IsNullOrWhiteSpace($Zeile)) { continue }
+        if ($Zeile.TrimStart().StartsWith('#')) { continue }
+
+        $Trenner = $Zeile.IndexOf('=')
+        if ($Trenner -lt 1) { continue }
+
+        $Schluessel = $Zeile.Substring(0, $Trenner).Trim()
+        $Wert       = $Zeile.Substring($Trenner + 1)
+        if ($Wert.StartsWith(' ')) { $Wert = $Wert.Substring(1) }
+        $Wert = $Wert -replace '\\n', "`n"
+
+        $Tabelle[$Schluessel] = $Wert
+    }
+
+    return $Tabelle
+}
+
+$script:SprachRoh = @{
+    de = @'
+ui.title=Exchange MoveRequest Live-Dashboard
+ui.subtitle=Server: %Server% | Aktualisierung alle %Seconds% Sekunden
+ui.versionTitle=Version des Skripts (aus dem .NOTES-Block)
+ui.updateBadgeTitle=Oeffnet die Release-Seite dieses Projekts im Browser.
+ui.updateBadge=Update verfuegbar
+ui.lastUpdateLoading=Letzte Aktualisierung: wird geladen...
+ui.live=LIVE
+ui.loadingStart=Dashboard wird gestartet ...
+ui.totalMoveRequests=Gesamtanzahl MoveRequests:
+ui.updates=Updates:
+ui.newMoveRequest=Neue Verschiebeanforderung
+ui.sourceDb=Quell-Datenbank (leer = alle Postfaecher)
+ui.allDatabases=-- alle Datenbanken --
+ui.targetDb=Ziel-Datenbank
+ui.pleaseChoose=-- bitte waehlen --
+ui.priority=Prioritaet (-Priority)
+ui.priorityLow=Low (niedrig)
+ui.priorityNormal=Normal (Standard)
+ui.priorityHigh=High (hoch)
+ui.priorityCritical=Critical (kritisch)
+ui.priorityEmergency=Emergency (Notfall)
+ui.badItems=BadItems ueberspringen (-BadItemLimit)
+ui.badItemsNone=0 - keine (Standard)
+ui.mode=Vorgangsweise
+ui.modeDirect=Direkt durchmigrieren (bis Completed)
+ui.modeSuspend=Erst bis 95 % laufen lassen und suspendieren
+ui.pretest=Vorabtest mit -WhatIf
+ui.pretestOff=aus (sofort verschieben)
+ui.pretestCheckThenMove=erst pruefen, dann verschieben
+ui.pretestOnly=nur pruefen (nichts verschieben)
+ui.mailboxType=Postfachart
+ui.mailboxTypeTitle=Sonderpostfaecher werden in der Normalansicht bewusst nicht angezeigt
+ui.mailboxTypeUser=Benutzerpostfaecher
+ui.mailboxTypeSpecial=Sonderpostfaecher (Arbitration, AuditLog, AuxAuditLog, PublicFolder, Archiv)
+ui.mailboxTypeArchive=Postfaecher mit Archiv
+ui.mailboxTypeAll=Alle (Benutzer- und Sonderpostfaecher)
+ui.filterMailboxes=Postfaecher filtern
+ui.filterMailboxesPlaceholder=Filter nach Name, Adresse, Alias, Typ oder Datenbank
+ui.selectAllVisible=Alle sichtbaren auswaehlen
+ui.clearSelection=Auswahl aufheben
+ui.mailboxesLoading=Postfaecher werden geladen ...
+ui.startMoveRequest=Verschiebeanforderung starten
+ui.selectedCount=0 Postfach/Postfaecher ausgewaehlt
+ui.resumeAllSuspended=Alle suspendierten abschliessen
+ui.deleteAllCompleted=Alle abgeschlossenen loeschen
+ui.backgroundJobNote=Resume-MoveRequest bzw. Remove-MoveRequest - laeuft als Hintergrund-Auftrag
+ui.detailsHeading=Detaillierte MoveRequest-Uebersicht
+ui.sortHint=Sortierung: Aktive Jobs (InProgress, Queued) werden immer oben angezeigt
+ui.searchPlaceholder=Suche nach Name, Status, Datenbank, Batch...
+ui.selectAllVisibleSuspendedTitle=Alle sichtbaren suspendierten Anforderungen auswaehlen (respektiert die Suche)
+ui.completeSelection=Auswahl abschliessen
+ui.completeSelectionTitle=Die ausgewaehlten Verschiebeanforderungen mit Resume-MoveRequest abschliessen
+ui.selectedCountShort=0 ausgewaehlt
+ui.colDisplayName=Anzeigename
+ui.colStatus=Status
+ui.colStatusDetail=Statusdetail
+ui.colProgress=Fortschritt
+ui.colTransferred=Uebertragen
+ui.colTotalSize=Gesamtgroesse
+ui.colItems=Items
+ui.colBadItems=Bad Items
+ui.colSourceDb=Quell-DB
+ui.colTargetDb=Ziel-DB
+ui.colBatch=Batch
+ui.colStart=Start
+ui.colCompletion=Abschluss
+ui.footer=Exchange MoveRequest Live-Dashboard | Version %Version% | PowerShell HttpListener | Intervall: %Seconds% s |
+ui.lightMode=Light-Modus |
+ui.jsonApi=JSON-API
+ui.stopServer=Server stoppen
+ui.language=Sprache
+ui.languageDe=Deutsch
+ui.languageEn=English
+
+js.noMailboxes=keine Postfaecher gefunden
+js.loadedOf=%Done% von %Total% Postfaechern geladen
+js.mailboxesLoadedOne=%Count% Postfach geladen
+js.mailboxesLoadedMany=%Count% Postfaecher geladen
+js.dashboardDataPending=Postfaecher geladen - Dashboard-Daten werden noch abgefragt ...
+js.dashboardDataReady=Dashboard-Daten da - Postfaecher werden im Hintergrund geladen ...
+js.lastUpdate=Letzte Aktualisierung: %Zeit%
+js.dataAge=Datenalter: %Alter% s | Letzte Sammlung dauerte: %Dauer% s
+js.detailPending= | Detaildaten offen: %Count%
+js.failedCount= | Fehlgeschlagen: %Count%
+js.updateAvailable=Update verfuegbar: %Tag%
+js.timeout=Zeitueberschreitung nach %Seconds% s. Der Server sammelt noch oder ist blockiert. Letzte bekannte Daten bleiben stehen.
+js.connectionLost=Verbindung zum Server verloren: %Message%
+js.noData=Keine Daten vorhanden.
+js.noMoveRequests=Keine MoveRequests vorhanden.
+js.completedInactiveJobs=Abgeschlossene / Inaktive Jobs
+js.statsUnavailable=Statistik nicht abrufbar: %Cause%
+js.unknownCause=unbekannte Ursache
+js.detailsLoading=Detaildaten werden nachgeladen.
+js.detailsLoadingTitle=Detaildaten werden nachgeladen
+js.selectToComplete=Auswaehlen, um mehrere Verschiebeanforderungen gemeinsam abzuschliessen
+js.completeTitle=Diese Verschiebeanforderung abschliessen (Resume-MoveRequest)
+js.complete=Abschliessen
+js.databasesLoadError=Datenbanken konnten nicht geladen werden: %Message%
+js.mailboxesLoadError=Fehler beim Laden der Postfaecher: %Message%
+js.mailboxesQueried=Postfaecher abgefragt - Liste wird aufgebaut ...
+js.noMatchingMailboxes=Keine passenden Postfaecher gefunden.
+js.alreadyMoving=(bereits in Bewegung: %Status%)
+js.unknown=unbekannt
+js.archive=Archiv
+js.mailboxTypeUser=Benutzerpostfaecher
+js.mailboxTypeSpecial=Sonderpostfaecher
+js.mailboxTypeArchive=Postfaecher mit Archiv
+js.mailboxTypeAll=Benutzer- und Sonderpostfaecher
+js.mailboxes=Postfaecher
+js.visibleOf=%Visible% von %Total% %Type% sichtbar
+js.source=(Quelle: %Source%)
+js.allDatabases=(alle Datenbanken)
+js.selected=%Count% Postfach/Postfaecher ausgewaehlt
+js.modeSuspendHint=Der MoveRequest wird vor dem Abschluss angehalten (ReadyToComplete, klassische 95-%-Stufe). Die Finalisierung erfolgt spaeter, z. B. per Resume-MoveRequest - das Postfach wird vorher nicht gesperrt.
+js.modeDirectHint=Die Postfaecher werden vollstaendig in die Ziel-Datenbank migriert und danach abgeschlossen.
+js.checkOnly=Nur pruefen (WhatIf)
+js.checkAndMove=Pruefen und verschieben
+js.startMove=Verschiebeanforderung starten
+js.pretestOnly=nur pruefen (nichts verschieben)
+js.pretestCheckThenMove=erst pruefen, dann verschieben
+js.pretestOff=aus (sofort verschieben)
+js.selectTarget=Bitte eine Ziel-Datenbank auswaehlen.
+js.sameDb=Quell- und Ziel-Datenbank sind identisch.
+js.selectMailbox=Bitte mindestens ein Postfach auswaehlen.
+js.confirmMove=%Count% Postfach/Postfaecher in die Datenbank "%Target%" verschieben?
+js.confirmCheckOnly=%Count% Postfach/Postfaecher in der Datenbank "%Target%" nur pruefen (WhatIf)?
+js.confirmMoveDetails=\n\nQuelle: %Source%\nPrioritaet: %Priority%\nBadItems ueberspringen: %BadItems%\nVorabtest: %Pretest%
+js.confirmMode=\nModus: %Mode%
+js.modeSuspendShort=bis 95 % laufen lassen und suspendieren
+js.modeDirectShort=direkt durchmigrieren
+js.whatIfStarted=WhatIf-Pruefung wird gestartet ...
+js.jobStarted=Auftrag wird gestartet ...
+js.jobStartedStrong=Auftrag #%Id% gestartet.
+js.errorPrefix=Fehler: %Message%
+js.actionRunning=Es laeuft bereits ein Vorgang - bitte kurz warten.
+js.actionStarted=Aktion wird gestartet ...
+js.confirmResumeBatch=Suspendierte Anforderungen im Batch "%Batch%" fortsetzen?\n\nResume-MoveRequest: die Verschiebung laeuft danach bis zum Abschluss weiter.
+js.confirmResumeOne=Verschiebeanforderung von "%Name%" abschliessen?\n\nResume-MoveRequest fuer genau diese Anforderung:\ndie Verschiebung laeuft danach bis zum Abschluss weiter.
+js.confirmResumeAll=Alle suspendierten MoveRequests fortsetzen?\n\nResume-MoveRequest fuer jede suspendierte Anforderung (alle Batches).
+js.confirmDeleteBatch=Abgeschlossene Anforderungen im Batch "%Batch%" loeschen?\n\nRemove-MoveRequest - nur die MoveRequest-Eintraege werden entfernt, die Postfaecher bleiben unberuehrt.
+js.confirmDeleteAll=Alle abgeschlossenen MoveRequests loeschen?\n\nRemove-MoveRequest - nur die MoveRequest-Eintraege werden entfernt, die Postfaecher bleiben unberuehrt.
+js.confirmCompleteSelectedOne=1 ausgewaehlte Verschiebeanforderung abschliessen?
+js.confirmCompleteSelectedMany=%Count% ausgewaehlte Verschiebeanforderungen abschliessen?
+js.confirmCompleteSelectedDetails=\n\nResume-MoveRequest fuer:\n%List%%Rest%\n\nDie Verschiebungen laufen danach bis zum Abschluss weiter.
+js.andMore=\n  ... und %Count% weitere
+js.selectedInTable=%Count% ausgewaehlt
+js.resumeSuspended=Suspendierte abschliessen
+js.deleteCompleted=Abgeschlossene loeschen
+js.statusRunning=Laufend
+js.statusCompleted=Abgeschlossen
+js.statusFailed=Fehlgeschlagen
+js.resumeDone=suspendierte Anforderungen fortgesetzt
+js.removeDone=abgeschlossene Anforderungen entfernt
+js.moveRequestsCreated=MoveRequests erstellt
+js.errors=Fehler
+js.suspendBeforeComplete=suspendieren vor Abschluss
+js.migrateThrough=durchmigrieren
+js.priorityLabel=Prioritaet: %Value%
+js.badItemsLabel=BadItems: %Value%
+js.whatIfOnly=nur pruefen
+js.whatIfCheckMove=pruefen + verschieben
+js.batchLabel=Batch: %Value%
+js.startLabel=Start: %Value%
+js.statusQueryFailed=Statusabfrage fehlgeschlagen: %Message%
+js.confirmStop=Moechten Sie den Dashboard-Server wirklich stoppen?
+js.serverStopped=Server wurde gestoppt.
+js.serverStoppedDisconnected=Server gestoppt (Verbindung getrennt).
+js.start=START
+js.stopped=GESTOPPT
+js.timeoutStatus=TIMEOUT
+js.offline=OFFLINE
+js.filterArchive=archiv
+
+msg.noMailboxesSelected=Keine Postfaecher ausgewaehlt.
+msg.noTargetDb=Keine Ziel-Datenbank angegeben.
+msg.sourceTargetSame=Quell- und Ziel-Datenbank sind identisch.
+msg.targetNotFound=Ziel-Datenbank '%Target%' wurde nicht gefunden: %Error%
+msg.targetNotMounted=Die Ziel-Datenbank '%Target%' ist nicht bereitgestellt (nicht gemountet). Dorthin koennen keine MoveRequests erstellt werden.
+msg.invalidPriority=Unzulaessige Prioritaet '%Priority%'. Erlaubt: %Allowed%.
+msg.invalidPretest=Unzulaessiger Vorabtest '%Pretest%'. Erlaubt: aus, pruefen, nur.
+msg.invalidBadItems=Unzulaessiger BadItemLimit '%Value%'. Erlaubt: %Allowed%.
+msg.sourceNotFound=Quell-Datenbank '%Source%' wurde nicht gefunden: %Error%
+msg.suspendUnavailable=Der Parameter -SuspendWhenReadyToComplete steht auf diesem Server nicht zur Verfuegung. Es kann nicht suspendiert werden.
+msg.jobStartFailed=Der Hintergrund-Job konnte nicht gestartet werden: %Error%
+msg.jobGone=Der Hintergrund-Job ist nicht mehr vorhanden (Skript evtl. neu gestartet).
+msg.resumeCount=%Done% von %Total% suspendierten Anforderungen fortgesetzt, %Errors% Fehler.
+msg.removeCount=%Done% von %Total% abgeschlossenen Anforderungen entfernt, %Errors% Fehler.
+msg.whatIfPassedCount=%Done% von %Total% Postfaechern bestanden die WhatIf-Pruefung, %Errors% Fehler. Es wurden keine MoveRequests erstellt.
+msg.createdAfterWhatIf=%Done% von %Total% MoveRequests erstellt (alle bestanden zuerst die WhatIf-Pruefung), %Errors% Fehler.
+msg.createdCount=%Done% von %Total% MoveRequests erstellt, %Errors% Fehler.
+msg.actionNoTarget=Es wurde weder eine Anforderung noch ein Batch noch 'alle' angegeben.
+msg.commandUnavailable=%Command% ist auf diesem Server nicht verfuegbar: %Error%
+msg.requestNotFoundSingle=Die Anforderung '%Identity%' ist keine %Word% Anforderung (mehr).
+msg.noneOfSelected=Keine der %Count% ausgewaehlten Anforderungen ist (mehr) eine %Word% Anforderung.
+msg.noMatchingMoveRequests=Keine %Word% MoveRequests gefunden.
+msg.noneInBatch=Im Batch '%Batch%' ist keine %Word% Anforderung vorhanden.
+msg.moveQueryFailed=Die MoveRequests konnten nicht abgefragt werden: %Error%
+msg.resumeDone=Anforderung fortgesetzt - die Verschiebung laeuft jetzt bis zum Abschluss weiter.
+msg.removeDone=Abgeschlossene Anforderung entfernt - das Postfach bleibt unberuehrt.
+msg.actionStartedResume=Fortsetzung: %Count% (%Selection%) - Resume-MoveRequest laeuft im Hintergrund, die Postfaecher ziehen bis zum Abschluss durch.
+msg.actionStartedRemove=Entfernen: %Count% (%Selection%) - Remove-MoveRequest laeuft im Hintergrund, nur die Anforderungs-Eintraege, die Postfaecher bleiben unberuehrt.
+msg.batchLabel=Batch '%Batch%'
+msg.allRequests=alle Anforderungen
+msg.multipleSelection=Mehrfachauswahl
+msg.requestSingular=%Count% Anforderung
+msg.requestPlural=%Count% Anforderungen
+msg.databasesLoadFailed=Datenbanken konnten nicht ermittelt werden: %Error%
+msg.mailboxesLoadFailed=Postfaecher konnten nicht geladen werden: %Error%
+msg.incompleteRequest=Unvollstaendige Anfrage.
+msg.unexpectedShippingResponse=Unerwartete Rueckmeldung vom Versand-Modul.
+msg.unexpectedActionResponse=Unerwartete Rueckmeldung vom Aktion-Modul.
+msg.statusLoadFailed=Status konnte nicht ermittelt werden: %Error%
+msg.noActionSpecified=Keine Aktion angegeben (Resume oder Entfernen).
+msg.noRequestBody=Kein Request-Body uebermittelt.
+msg.whatIfPassed=WhatIf-Pruefung bestanden - das Postfaecher ist verschiebbar, es wurde nichts erstellt.
+msg.whatIfFailed=WhatIf-Pruefung fehlgeschlagen: %Error%
+msg.moveCreatedSuspend=MoveRequest erstellt - haelt vor dem Abschluss an (95 %), Prioritaet: %Priority%.
+msg.moveCreatedDirect=MoveRequest erstellt - wird durchgehend migriert, Prioritaet: %Priority%.
+msg.snapinLoadFailed=Exchange Snap-In konnte nicht geladen werden: %Error%
+msg.statsUnavailable=Statistik nicht abrufbar
+msg.mailboxQueryFailed=Postfachabfrage '%Source%' schlug fehl: %Error%
+msg.elevationDeniedText=Das Skript wurde NICHT als Administrator gestartet (UAC abgelehnt).\n\nSystem- und Arbitration-Postfaecher lassen sich dann nicht verschieben - Exchange meldet 'Der Zugriff wurde verweigert'.\n\nBitte erneut starten und der UAC-Frage zustimmen.
+msg.elevationDeniedTitle=Exchange-MoveRequest-Dashboard - ohne Admin-Rechte
+'@
+
+    en = @'
+ui.title=Exchange MoveRequest Live Dashboard
+ui.subtitle=Server: %Server% | Refresh every %Seconds% seconds
+ui.versionTitle=Script version (from the .NOTES block)
+ui.updateBadgeTitle=Opens the release page of this project in the browser.
+ui.updateBadge=Update available
+ui.lastUpdateLoading=Last update: loading...
+ui.live=LIVE
+ui.loadingStart=Dashboard is starting ...
+ui.totalMoveRequests=Total move requests:
+ui.updates=Updates:
+ui.newMoveRequest=New move request
+ui.sourceDb=Source database (empty = all mailboxes)
+ui.allDatabases=-- all databases --
+ui.targetDb=Target database
+ui.pleaseChoose=-- please choose --
+ui.priority=Priority (-Priority)
+ui.priorityLow=Low
+ui.priorityNormal=Normal (default)
+ui.priorityHigh=High
+ui.priorityCritical=Critical
+ui.priorityEmergency=Emergency
+ui.badItems=Skip bad items (-BadItemLimit)
+ui.badItemsNone=0 - none (default)
+ui.mode=Mode
+ui.modeDirect=Migrate straight through (until Completed)
+ui.modeSuspend=Run to 95 % and suspend
+ui.pretest=Pretest with -WhatIf
+ui.pretestOff=off (move immediately)
+ui.pretestCheckThenMove=check first, then move
+ui.pretestOnly=check only (move nothing)
+ui.mailboxType=Mailbox type
+ui.mailboxTypeTitle=Special mailboxes are intentionally hidden in the normal view
+ui.mailboxTypeUser=User mailboxes
+ui.mailboxTypeSpecial=Special mailboxes (Arbitration, AuditLog, AuxAuditLog, PublicFolder, Archive)
+ui.mailboxTypeArchive=Mailboxes with archive
+ui.mailboxTypeAll=All (user and special mailboxes)
+ui.filterMailboxes=Filter mailboxes
+ui.filterMailboxesPlaceholder=Filter by name, address, alias, type or database
+ui.selectAllVisible=Select all visible
+ui.clearSelection=Clear selection
+ui.mailboxesLoading=Mailboxes are loading ...
+ui.startMoveRequest=Start move request
+ui.selectedCount=0 mailbox/mailboxes selected
+ui.resumeAllSuspended=Complete all suspended
+ui.deleteAllCompleted=Delete all completed
+ui.backgroundJobNote=Resume-MoveRequest or Remove-MoveRequest - runs as a background job
+ui.detailsHeading=Detailed MoveRequest overview
+ui.sortHint=Sort order: active jobs (InProgress, Queued) are always shown first
+ui.searchPlaceholder=Search by name, status, database, batch...
+ui.selectAllVisibleSuspendedTitle=Select all visible suspended requests (respects the search filter)
+ui.completeSelection=Complete selection
+ui.completeSelectionTitle=Complete the selected move requests with Resume-MoveRequest
+ui.selectedCountShort=0 selected
+ui.colDisplayName=Display name
+ui.colStatus=Status
+ui.colStatusDetail=Status detail
+ui.colProgress=Progress
+ui.colTransferred=Transferred
+ui.colTotalSize=Total size
+ui.colItems=Items
+ui.colBadItems=Bad items
+ui.colSourceDb=Source DB
+ui.colTargetDb=Target DB
+ui.colBatch=Batch
+ui.colStart=Start
+ui.colCompletion=Completion
+ui.footer=Exchange MoveRequest Live Dashboard | Version %Version% | PowerShell HttpListener | Interval: %Seconds% s |
+ui.lightMode=light mode |
+ui.jsonApi=JSON API
+ui.stopServer=Stop server
+ui.language=Language
+ui.languageDe=Deutsch
+ui.languageEn=English
+
+js.noMailboxes=no mailboxes found
+js.loadedOf=%Done% of %Total% mailboxes loaded
+js.mailboxesLoadedOne=%Count% mailbox loaded
+js.mailboxesLoadedMany=%Count% mailboxes loaded
+js.dashboardDataPending=Mailboxes loaded - dashboard data is still being fetched ...
+js.dashboardDataReady=Dashboard data ready - mailboxes are loading in the background ...
+js.lastUpdate=Last update: %Zeit%
+js.dataAge=Data age: %Alter% s | Last collection took: %Dauer% s
+js.detailPending= | details pending: %Count%
+js.failedCount= | failed: %Count%
+js.updateAvailable=Update available: %Tag%
+js.timeout=Timeout after %Seconds% s. The server is still collecting or blocked. The last known data remains visible.
+js.connectionLost=Connection to the server lost: %Message%
+js.noData=No data available.
+js.noMoveRequests=No move requests found.
+js.completedInactiveJobs=Completed / inactive jobs
+js.statsUnavailable=Statistics unavailable: %Cause%
+js.unknownCause=unknown cause
+js.detailsLoading=Detail data is being loaded.
+js.detailsLoadingTitle=Detail data is being loaded
+js.selectToComplete=Select to complete several move requests together
+js.completeTitle=Complete this move request (Resume-MoveRequest)
+js.complete=Complete
+js.databasesLoadError=Databases could not be loaded: %Message%
+js.mailboxesLoadError=Error loading mailboxes: %Message%
+js.mailboxesQueried=Mailboxes queried - building the list ...
+js.noMatchingMailboxes=No matching mailboxes found.
+js.alreadyMoving=(already moving: %Status%)
+js.unknown=unknown
+js.archive=Archive
+js.mailboxTypeUser=user mailboxes
+js.mailboxTypeSpecial=special mailboxes
+js.mailboxTypeArchive=mailboxes with archive
+js.mailboxTypeAll=user and special mailboxes
+js.mailboxes=mailboxes
+js.visibleOf=%Visible% of %Total% %Type% visible
+js.source=(source: %Source%)
+js.allDatabases=(all databases)
+js.selected=%Count% mailbox/mailboxes selected
+js.modeSuspendHint=The move request stops before completion (ReadyToComplete, the classic 95 % stage). Finalization happens later, e.g. with Resume-MoveRequest - the mailbox is not locked before that.
+js.modeDirectHint=The mailboxes are migrated completely to the target database and then finalized.
+js.checkOnly=Check only (WhatIf)
+js.checkAndMove=Check and move
+js.startMove=Start move request
+js.pretestOnly=check only (move nothing)
+js.pretestCheckThenMove=check first, then move
+js.pretestOff=off (move immediately)
+js.selectTarget=Please select a target database.
+js.sameDb=Source and target database are identical.
+js.selectMailbox=Please select at least one mailbox.
+js.confirmMove=Move %Count% mailbox/mailboxes to database "%Target%"?
+js.confirmCheckOnly=Check %Count% mailbox/mailboxes in database "%Target%" only (WhatIf)?
+js.confirmMoveDetails=\n\nSource: %Source%\nPriority: %Priority%\nSkip bad items: %BadItems%\nPretest: %Pretest%
+js.confirmMode=\nMode: %Mode%
+js.modeSuspendShort=run to 95 % and suspend
+js.modeDirectShort=migrate straight through
+js.whatIfStarted=WhatIf check is starting ...
+js.jobStarted=Job is starting ...
+js.jobStartedStrong=Job #%Id% started.
+js.errorPrefix=Error: %Message%
+js.actionRunning=Another operation is already running - please wait a moment.
+js.actionStarted=Action is starting ...
+js.confirmResumeBatch=Resume suspended requests in batch "%Batch%"?\n\nResume-MoveRequest: the move then continues until completion.
+js.confirmResumeOne=Complete the move request for "%Name%"?\n\nResume-MoveRequest for exactly this request:\nthe move then continues until completion.
+js.confirmResumeAll=Resume all suspended move requests?\n\nResume-MoveRequest for every suspended request (all batches).
+js.confirmDeleteBatch=Delete completed requests in batch "%Batch%"?\n\nRemove-MoveRequest - only the move request entries are removed, the mailboxes remain untouched.
+js.confirmDeleteAll=Delete all completed move requests?\n\nRemove-MoveRequest - only the move request entries are removed, the mailboxes remain untouched.
+js.confirmCompleteSelectedOne=Complete 1 selected move request?
+js.confirmCompleteSelectedMany=Complete %Count% selected move requests?
+js.confirmCompleteSelectedDetails=\n\nResume-MoveRequest for:\n%List%%Rest%\n\nThe moves then continue until completion.
+js.andMore=\n  ... and %Count% more
+js.selectedInTable=%Count% selected
+js.resumeSuspended=Complete suspended
+js.deleteCompleted=Delete completed
+js.statusRunning=Running
+js.statusCompleted=Completed
+js.statusFailed=Failed
+js.resumeDone=suspended requests resumed
+js.removeDone=completed requests removed
+js.moveRequestsCreated=move requests created
+js.errors=errors
+js.suspendBeforeComplete=suspend before completion
+js.migrateThrough=migrate straight through
+js.priorityLabel=Priority: %Value%
+js.badItemsLabel=Bad items: %Value%
+js.whatIfOnly=check only
+js.whatIfCheckMove=check + move
+js.batchLabel=Batch: %Value%
+js.startLabel=Start: %Value%
+js.statusQueryFailed=Status query failed: %Message%
+js.confirmStop=Do you really want to stop the dashboard server?
+js.serverStopped=Server stopped.
+js.serverStoppedDisconnected=Server stopped (connection closed).
+js.start=START
+js.stopped=STOPPED
+js.timeoutStatus=TIMEOUT
+js.offline=OFFLINE
+js.filterArchive=archive
+
+msg.noMailboxesSelected=No mailboxes selected.
+msg.noTargetDb=No target database specified.
+msg.sourceTargetSame=Source and target database are identical.
+msg.targetNotFound=Target database '%Target%' was not found: %Error%
+msg.targetNotMounted=Target database '%Target%' is not mounted. No move requests can be created for it.
+msg.invalidPriority=Invalid priority '%Priority%'. Allowed: %Allowed%.
+msg.invalidPretest=Invalid pretest '%Pretest%'. Allowed: off, check, only.
+msg.invalidBadItems=Invalid BadItemLimit '%Value%'. Allowed: %Allowed%.
+msg.sourceNotFound=Source database '%Source%' was not found: %Error%
+msg.suspendUnavailable=The parameter -SuspendWhenReadyToComplete is not available on this server. Suspending is not possible.
+msg.jobStartFailed=The background job could not be started: %Error%
+msg.jobGone=The background job no longer exists (script may have been restarted).
+msg.resumeCount=%Done% of %Total% suspended requests resumed, %Errors% errors.
+msg.removeCount=%Done% of %Total% completed requests removed, %Errors% errors.
+msg.whatIfPassedCount=%Done% of %Total% mailboxes passed the WhatIf check, %Errors% errors. No move requests were created.
+msg.createdAfterWhatIf=%Done% of %Total% move requests created (all passed the WhatIf check first), %Errors% errors.
+msg.createdCount=%Done% of %Total% move requests created, %Errors% errors.
+msg.actionNoTarget=Neither a request nor a batch nor 'all' was specified.
+msg.commandUnavailable=%Command% is not available on this server: %Error%
+msg.requestNotFoundSingle=Request '%Identity%' is no longer a %Word% request.
+msg.noneOfSelected=None of the %Count% selected requests is (still) a %Word% request.
+msg.noMatchingMoveRequests=No %Word% move requests found.
+msg.noneInBatch=No %Word% request exists in batch '%Batch%'.
+msg.moveQueryFailed=The move requests could not be queried: %Error%
+msg.resumeDone=Request resumed - the move now continues until completion.
+msg.removeDone=Completed request removed - the mailbox remains untouched.
+msg.actionStartedResume=Resume: %Count% (%Selection%) - Resume-MoveRequest runs in the background, the mailboxes continue until completion.
+msg.actionStartedRemove=Remove: %Count% (%Selection%) - Remove-MoveRequest runs in the background, only the request entries are removed, the mailboxes remain untouched.
+msg.batchLabel=batch '%Batch%'
+msg.allRequests=all requests
+msg.multipleSelection=multiple selection
+msg.requestSingular=%Count% request
+msg.requestPlural=%Count% requests
+msg.databasesLoadFailed=Databases could not be determined: %Error%
+msg.mailboxesLoadFailed=Mailboxes could not be loaded: %Error%
+msg.incompleteRequest=Incomplete request.
+msg.unexpectedShippingResponse=Unexpected response from the move module.
+msg.unexpectedActionResponse=Unexpected response from the action module.
+msg.statusLoadFailed=Status could not be determined: %Error%
+msg.noActionSpecified=No action specified (Resume or Remove).
+msg.noRequestBody=No request body submitted.
+msg.whatIfPassed=WhatIf check passed - the mailbox can be moved, nothing was created.
+msg.whatIfFailed=WhatIf check failed: %Error%
+msg.moveCreatedSuspend=Move request created - stops before completion (95 %), priority: %Priority%.
+msg.moveCreatedDirect=Move request created - migrates straight through, priority: %Priority%.
+msg.snapinLoadFailed=Exchange snap-in could not be loaded: %Error%
+msg.statsUnavailable=Statistics unavailable
+msg.mailboxQueryFailed=Mailbox query '%Source%' failed: %Error%
+msg.elevationDeniedText=The script was NOT started as administrator (UAC declined).\n\nSystem and arbitration mailboxes cannot be moved in this state - Exchange reports 'Access is denied'.\n\nPlease start it again and accept the UAC prompt.
+msg.elevationDeniedTitle=Exchange-MoveRequest-Dashboard - without administrator rights
+'@
+}
+
+$script:Texte = @{
+    de = ConvertTo-SprachTabelle -RohText $script:SprachRoh.de
+    en = ConvertTo-SprachTabelle -RohText $script:SprachRoh.en
+}
+
+if ($Sprache -in @('de', 'en')) {
+    $script:Sprache = $Sprache
+}
+else {
+    $script:Sprache = Get-StandardSprache
+}
+
+function T {
+    <#
+    .SYNOPSIS
+        Liefert einen lokalisierten Text. %Name%-Platzhalter werden aus dem
+        uebergebenen Hashtable ersetzt.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string]$Key,
+        [hashtable]$Werte,
+        [string]$SprachCode = ""
+    )
+
+    if ([string]::IsNullOrWhiteSpace($SprachCode)) { $SprachCode = $script:Sprache }
+    if (-not $script:Texte.ContainsKey($SprachCode)) { $SprachCode = 'de' }
+
+    $Text = $script:Texte[$SprachCode][$Key]
+    if ($null -eq $Text) { $Text = $script:Texte['de'][$Key] }
+    if ($null -eq $Text) { return "[[$Key]]" }
+
+    if ($Werte) {
+        foreach ($Name in $Werte.Keys) {
+            $Text = $Text.Replace("%$Name%", [string]$Werte[$Name])
+        }
+    }
+
+    return $Text
+}
+
+function Resolve-SprachPlatzhalter {
+    <#
+    .SYNOPSIS
+        Ersetzt {{key}}-Platzhalter im Dashboard-HTML durch die Texte der
+        gewaehlten Sprache.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string]$Text,
+        [string]$SprachCode = ""
+    )
+
+    if ([string]::IsNullOrWhiteSpace($SprachCode)) { $SprachCode = $script:Sprache }
+    if (-not $script:Texte.ContainsKey($SprachCode)) { $SprachCode = 'de' }
+
+    $Tabelle = $script:Texte[$SprachCode]
+    foreach ($Key in $Tabelle.Keys) {
+        $Text = $Text.Replace("{{$Key}}", [string]$Tabelle[$Key])
+    }
+
+    return $Text
+}
+
+function Get-AnfrageSprache {
+    param($Anfrage)
+
+    try {
+        $AusQuery = [string]$Anfrage.QueryString['lang']
+        if ($AusQuery -in @('de', 'en')) { return $AusQuery }
+    }
+    catch { }
+
+    try {
+        $AusCookie = [string]$Anfrage.Cookies['DashboardSprache'].Value
+        if ($AusCookie -in @('de', 'en')) { return $AusCookie }
+    }
+    catch { }
+
+    return $script:Sprache
+}
 
 # ============================================================================
 # Region: Variablen-Definition
@@ -3528,6 +4112,14 @@ function Get-DashboardHTML {
         für automatische Live-Updates via AJAX (Fetch-API).
         Die Sortierung priorisiert aktive Jobs oben in der Tabelle.
     #>
+    param(
+        [Parameter(Mandatory = $false)]
+        [ValidateSet("de", "en")]
+        [string]$SprachCode = ""
+    )
+
+    if ([string]::IsNullOrWhiteSpace($SprachCode)) { $SprachCode = $script:Sprache }
+    if (-not $script:Texte.ContainsKey($SprachCode)) { $SprachCode = 'de' }
 
     # Light-Modus (-Light): die technischen Spalten werden per CSS
     # ausgeblendet, weil sie gar nicht gefuellt sind - es wird keine
@@ -3538,19 +4130,39 @@ function Get-DashboardHTML {
 
     # Kennzeichnung in der Fusszeile, damit man den Modus im Browser sieht.
     $LightFussnote = ""
-    if ($Light) { $LightFussnote = " Light-Modus |" }
+    if ($Light) { $LightFussnote = " " + (T -Key 'ui.lightMode' -SprachCode $SprachCode) }
 
     # Versionsnummer aus dem .NOTES-Block - Kopfzeile, Seitentitel und
     # Fusszeile zeigen damit immer genau die Version, die hier laeuft.
     $SkriptVersion = Get-SkriptVersion
 
+    # Nur die js.*-Schluessel in die Seite einbetten: das Frontend braucht
+    # sie fuer dynamisch erzeugte Texte, der Rest wird serverseitig ersetzt.
+    $JsTabelle = @{}
+    foreach ($Schluessel in $script:Texte[$SprachCode].Keys) {
+        if ($Schluessel.StartsWith('js.')) {
+            $JsTabelle[$Schluessel.Substring(3)] = $script:Texte[$SprachCode][$Schluessel]
+        }
+    }
+    $JsJson = $JsTabelle | ConvertTo-Json -Compress
+
+    $SprachTitel = T -Key 'ui.title' -SprachCode $SprachCode
+    $SprachUntertitel = T -Key 'ui.subtitle' -SprachCode $SprachCode -Werte @{
+        Server  = $ExchangeServer
+        Seconds = $AktualisierungsIntervall
+    }
+    $SprachFusszeile = T -Key 'ui.footer' -SprachCode $SprachCode -Werte @{
+        Version = $SkriptVersion
+        Seconds = $AktualisierungsIntervall
+    }
+
     $HTML = @"
 <!DOCTYPE html>
-<html lang="de">
+<html lang="$SprachCode">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Exchange MoveRequest Live-Dashboard v$SkriptVersion</title>
+    <title>{{ui.title}} v$SkriptVersion</title>
     <style>
         /* ============ Grundlegendes Layout ============ */
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -3611,6 +4223,28 @@ function Get-DashboardHTML {
         .update-badge:hover { background: #ffca2c; }
         #alterAnzeige { font-size: 12px; opacity: 0.8; margin-top: 4px; }
         #alterAnzeige.veraltet { color: #ffd166; font-weight: 600; }
+
+        /* Sprachumschalter (v2.16): DE/EN direkt im Kopf, Auswahl wird
+           als Cookie gespeichert und die Seite mit ?lang= neu geladen. */
+        .sprach-schalter {
+            display: inline-flex;
+            align-items: center;
+            gap: 0;
+            margin-top: 8px;
+            border: 1px solid rgba(255,255,255,0.5);
+            border-radius: 14px;
+            overflow: hidden;
+        }
+        .sprach-schalter a {
+            color: white;
+            text-decoration: none;
+            padding: 3px 10px;
+            font-size: 12px;
+            font-weight: 600;
+            line-height: 18px;
+        }
+        .sprach-schalter a:hover { background: rgba(255,255,255,0.18); }
+        .sprach-schalter a.aktiv { background: rgba(255,255,255,0.32); }
 
         /* ============ Live-Indikator ============ */
         .live-indikator {
@@ -4076,7 +4710,7 @@ $LightCSS
     <div class="lade-overlay" id="ladeOverlay">
         <div class="lade-kasten">
             <div class="spinner"></div>
-            <div class="lade-text" id="ladeText">Dashboard wird gestartet ...</div>
+            <div class="lade-text" id="ladeText">{{ui.loadingStart}}</div>
             <div class="lade-zahl" id="ladeZahl"></div>
         </div>
     </div>
@@ -4084,14 +4718,21 @@ $LightCSS
     <!-- Header -->
     <div class="header">
         <div>
-            <h1>&#128230; Exchange MoveRequest Live-Dashboard <span class="version-marke" title="Version des Skripts (aus dem .NOTES-Block)">v$SkriptVersion</span><a id="updateBadge" class="update-badge" href="#" target="_blank" rel="noopener" style="display:none;" title="Oeffnet die Release-Seite dieses Projekts im Browser.">Update verfuegbar</a></h1>
-            <p>Server: $ExchangeServer | Aktualisierung alle $AktualisierungsIntervall Sekunden</p>
-            <p id="zeitstempelAnzeige">Letzte Aktualisierung: wird geladen...</p>
+            <h1>&#128230; {{ui.title}} <span class="version-marke" title="{{ui.versionTitle}}">v$SkriptVersion</span><a id="updateBadge" class="update-badge" href="#" target="_blank" rel="noopener" style="display:none;" title="{{ui.updateBadgeTitle}}">{{ui.updateBadge}}</a></h1>
+            <p>$SprachUntertitel</p>
+            <p id="zeitstempelAnzeige">{{ui.lastUpdateLoading}}</p>
             <p id="alterAnzeige"></p>
+            <!-- Sprachumschalter (v2.16): setzt das Cookie DashboardSprache
+                 und laedt die Seite mit ?lang= neu. Die Auswahl gilt damit
+                 auch fuer alle serverseitig erzeugten Meldungen. -->
+            <div class="sprach-schalter" title="{{ui.language}}">
+                <a href="/?lang=de" class="$(if ($SprachCode -eq 'de') { 'aktiv' })" onclick="return spracheUmschalten('de')">DE</a>
+                <a href="/?lang=en" class="$(if ($SprachCode -eq 'en') { 'aktiv' })" onclick="return spracheUmschalten('en')">EN</a>
+            </div>
         </div>
         <div class="live-indikator">
             <div class="live-punkt" id="livePunkt"></div>
-            <span id="liveStatusText">LIVE</span>
+            <span id="liveStatusText">{{ui.live}}</span>
         </div>
     </div>
 
@@ -4105,8 +4746,8 @@ $LightCSS
 
     <!-- Gesamtanzahl -->
     <div class="gesamt-box">
-        <span>Gesamtanzahl MoveRequests: <strong id="gesamtAnzahl">0</strong></span>
-        <span style="font-size: 12px; color: #888;" id="updateZaehler">Updates: 0</span>
+        <span>{{ui.totalMoveRequests}} <strong id="gesamtAnzahl">0</strong></span>
+        <span style="font-size: 12px; color: #888;" id="updateZaehler">{{ui.updates}} 0</span>
     </div>
 
     <!-- Status-Kacheln -->
@@ -4114,36 +4755,36 @@ $LightCSS
 
     <!-- Verschiebeanforderung starten -->
     <div class="versand-container">
-        <h2>&#128666; Neue Verschiebeanforderung</h2>
+        <h2>&#128666; {{ui.newMoveRequest}}</h2>
         <div class="versand-body">
 
             <div class="versand-zeile">
                 <div class="versand-feld">
-                    <label for="quellDatenbank">Quell-Datenbank (leer = alle Postfächer)</label>
+                    <label for="quellDatenbank">{{ui.sourceDb}}</label>
                     <select id="quellDatenbank" onchange="benutzerLaden()">
-                        <option value="">-- alle Datenbanken --</option>
+                        <option value="">{{ui.allDatabases}}</option>
                     </select>
                 </div>
                 <div class="versand-feld">
-                    <label for="zielDatenbank">Ziel-Datenbank</label>
+                    <label for="zielDatenbank">{{ui.targetDb}}</label>
                     <select id="zielDatenbank">
-                        <option value="">-- bitte wählen --</option>
+                        <option value="">{{ui.pleaseChoose}}</option>
                     </select>
                 </div>
                 <div class="versand-feld">
-                    <label for="prioritaet">Priorität (-Priority)</label>
+                    <label for="prioritaet">{{ui.priority}}</label>
                     <select id="prioritaet">
-                        <option value="Low">Low (niedrig)</option>
-                        <option value="Normal" selected>Normal (Standard)</option>
-                        <option value="High">High (hoch)</option>
-                        <option value="Critical">Critical (kritisch)</option>
-                        <option value="Emergency">Emergency (Notfall)</option>
+                        <option value="Low">{{ui.priorityLow}}</option>
+                        <option value="Normal" selected>{{ui.priorityNormal}}</option>
+                        <option value="High">{{ui.priorityHigh}}</option>
+                        <option value="Critical">{{ui.priorityCritical}}</option>
+                        <option value="Emergency">{{ui.priorityEmergency}}</option>
                     </select>
                 </div>
                 <div class="versand-feld">
-                    <label for="badItemLimit">BadItems überspringen (-BadItemLimit)</label>
+                    <label for="badItemLimit">{{ui.badItems}}</label>
                     <select id="badItemLimit">
-                        <option value="0" selected>0 – keine (Standard)</option>
+                        <option value="0" selected>{{ui.badItemsNone}}</option>
                         <option value="1">1</option>
                         <option value="10">10</option>
                         <option value="20">20</option>
@@ -4154,15 +4795,15 @@ $LightCSS
             </div>
 
             <div class="versand-feld">
-                <label>Vorgangsweise</label>
+                <label>{{ui.mode}}</label>
                 <div class="modus-optionen">
                     <label>
                         <input type="radio" name="versandModus" value="durch" checked onchange="modusGeaendert()">
-                        Direkt durchmigrieren (bis Completed)
+                        {{ui.modeDirect}}
                     </label>
                     <label>
                         <input type="radio" name="versandModus" value="suspend" onchange="modusGeaendert()">
-                        Erst bis 95 % laufen lassen und suspendieren
+                        {{ui.modeSuspend}}
                     </label>
                 </div>
                 <div class="modus-hinweis" id="modusHinweis"></div>
@@ -4170,57 +4811,57 @@ $LightCSS
 
             <div class="versand-zeile" style="margin-bottom: 12px;">
                 <div class="versand-feld" style="margin-bottom: 0;">
-                    <label for="vorabtest">Vorabtest mit -WhatIf</label>
+                    <label for="vorabtest">{{ui.pretest}}</label>
                     <select id="vorabtest" onchange="vorabtestGeaendert()">
-                        <option value="aus" selected>aus (sofort verschieben)</option>
-                        <option value="pruefen">erst prüfen, dann verschieben</option>
-                        <option value="nur">nur prüfen (nichts verschieben)</option>
+                        <option value="aus" selected>{{ui.pretestOff}}</option>
+                        <option value="pruefen">{{ui.pretestCheckThenMove}}</option>
+                        <option value="nur">{{ui.pretestOnly}}</option>
                     </select>
                 </div>
             </div>
 
             <div class="versand-zeile">
                 <div class="versand-feld">
-                    <label for="postfachTyp">Postfachart</label>
+                    <label for="postfachTyp">{{ui.mailboxType}}</label>
                     <select id="postfachTyp" onchange="benutzerLaden()"
-                            title="Sonderpostfaecher werden in der Normalansicht bewusst nicht angezeigt">
-                        <option value="benutzer" selected>Benutzerpostfächer</option>
-                        <option value="sonder">Sonderpostfächer (Arbitration, AuditLog, AuxAuditLog, PublicFolder, Archiv)</option>
-                        <option value="archiv">Postfächer mit Archiv</option>
-                        <option value="alle">Alle (Benutzer- und Sonderpostfächer)</option>
+                            title="{{ui.mailboxTypeTitle}}">
+                        <option value="benutzer" selected>{{ui.mailboxTypeUser}}</option>
+                        <option value="sonder">{{ui.mailboxTypeSpecial}}</option>
+                        <option value="archiv">{{ui.mailboxTypeArchive}}</option>
+                        <option value="alle">{{ui.mailboxTypeAll}}</option>
                     </select>
                 </div>
                 <div class="versand-feld">
-                    <label for="benutzerSuche">Postfächer filtern</label>
+                    <label for="benutzerSuche">{{ui.filterMailboxes}}</label>
                     <input type="text" class="versand-suche" id="benutzerSuche"
-                           placeholder="&#128269; Filter nach Name, Adresse, Alias, Typ oder Datenbank" oninput="benutzerFiltern()">
+                           placeholder="&#128269; {{ui.filterMailboxesPlaceholder}}" oninput="benutzerFiltern()">
                 </div>
             </div>
 
             <div class="versand-werkzeuge">
-                <button type="button" class="mini-schalter" onclick="alleSichtbarenAuswaehlen()">Alle sichtbaren auswählen</button>
-                <button type="button" class="mini-schalter" onclick="auswahlAufheben()">Auswahl aufheben</button>
+                <button type="button" class="mini-schalter" onclick="alleSichtbarenAuswaehlen()">{{ui.selectAllVisible}}</button>
+                <button type="button" class="mini-schalter" onclick="auswahlAufheben()">{{ui.clearSelection}}</button>
                 <span class="versand-hinweis-text" id="benutzerHinweis"></span>
             </div>
 
             <div class="benutzer-liste" id="benutzerListe">
-                <div style="color:#888;padding:10px;">Postfächer werden geladen ...</div>
+                <div style="color:#888;padding:10px;">{{ui.mailboxesLoading}}</div>
             </div>
 
             <div class="versand-zeile" style="margin-top: 15px;">
                 <button type="button" class="versand-schalter" id="versandSchalter"
-                        onclick="verschiebungStarten()">&#9654; Verschiebeanforderung starten</button>
-                <span class="versand-hinweis-text" id="auswahlZahl">0 Postfach/Postfächer ausgewählt</span>
+                        onclick="verschiebungStarten()">&#9654; {{ui.startMoveRequest}}</button>
+                <span class="versand-hinweis-text" id="auswahlZahl">{{ui.selectedCount}}</span>
             </div>
 
             <div class="versand-zeile" style="margin-top: 8px;">
                 <button type="button" class="versand-schalter aktion-schalter"
                         id="alleResumeSchalter"
-                        onclick="alleSuspendAbschliessen()">&#8635; Alle suspendierten abschließen</button>
+                        onclick="alleSuspendAbschliessen()">&#8635; {{ui.resumeAllSuspended}}</button>
                 <button type="button" class="versand-schalter aktion-schalter aktion-warn"
                         id="alleLoeschenSchalter"
-                        onclick="alleAbgeschlossenenLoeschen()">&#10005; Alle abgeschlossenen löschen</button>
-                <span class="versand-hinweis-text">Resume-MoveRequest bzw. Remove-MoveRequest &#8211; läuft als Hintergrund-Auftrag</span>
+                        onclick="alleAbgeschlossenenLoeschen()">&#10005; {{ui.deleteAllCompleted}}</button>
+                <span class="versand-hinweis-text">{{ui.backgroundJobNote}}</span>
             </div>
 
             <div class="versand-ergebnis" id="versandErgebnis"></div>
@@ -4229,48 +4870,48 @@ $LightCSS
 
     <!-- Detail-Tabelle -->
     <div class="tabellen-container">
-        <h2>&#128203; Detaillierte MoveRequest-Übersicht</h2>
+        <h2>&#128203; {{ui.detailsHeading}}</h2>
         <div class="sortier-hinweis" id="sortierHinweis">
-            &#9650; Sortierung: Aktive Jobs (InProgress, Queued) werden immer oben angezeigt
+            &#9650; {{ui.sortHint}}
         </div>
         <div class="suchfeld-container">
             <input type="text" class="suchfeld" id="suchfeld"
-                   placeholder="&#128269; Suche nach Name, Status, Datenbank, Batch...">
+                   placeholder="&#128269; {{ui.searchPlaceholder}}">
         </div>
         <!-- Mehrfachauswahl: suspendierte Anforderungen anklicken und in
              einem Schritt abschliessen (v2.7). Erscheint nur, wenn es
              ueberhaupt auswaehlbare Zeilen gibt. -->
         <div class="auswahl-leiste" id="moveAuswahlLeiste">
-            <label title="Alle sichtbaren suspendierten Anforderungen auswählen (respektiert die Suche)">
+            <label title="{{ui.selectAllVisibleSuspendedTitle}}">
                 <input type="checkbox" id="moveAlleAuswahl" onchange="moveAlleAuswahlGeaendert(this)">
-                Alle sichtbaren auswählen
+                {{ui.selectAllVisible}}
             </label>
             <button type="button" class="mini-schalter" id="moveAuswahlSchalter"
                     onclick="moveAuswahlAbschliessen()" disabled
-                    title="Die ausgewählten Verschiebeanforderungen mit Resume-MoveRequest abschließen">
-                &#8635; Auswahl abschließen
+                    title="{{ui.completeSelectionTitle}}">
+                &#8635; {{ui.completeSelection}}
             </button>
             <button type="button" class="mini-schalter" id="moveAuswahlAufhebenSchalter"
-                    onclick="moveAuswahlAufheben()" disabled>Auswahl aufheben</button>
-            <span class="versand-hinweis-text" id="moveAuswahlZahl">0 ausgewählt</span>
+                    onclick="moveAuswahlAufheben()" disabled>{{ui.clearSelection}}</button>
+            <span class="versand-hinweis-text" id="moveAuswahlZahl">{{ui.selectedCountShort}}</span>
         </div>
         <div class="tabellen-scroll">
             <table>
                 <thead>
                     <tr>
-                        <th>Anzeigename</th>
-                        <th>Status</th>
-                        <th class="spalte-technisch">Statusdetail</th>
-                        <th class="spalte-technisch">Fortschritt</th>
-                        <th class="spalte-technisch">Übertragen</th>
-                        <th class="spalte-technisch">Gesamtgröße</th>
-                        <th class="spalte-technisch">Items</th>
-                        <th class="spalte-technisch">Bad Items</th>
-                        <th>Quell-DB</th>
-                        <th>Ziel-DB</th>
-                        <th>Batch</th>
-                        <th class="spalte-technisch">Start</th>
-                        <th class="spalte-technisch">Abschluss</th>
+                        <th>{{ui.colDisplayName}}</th>
+                        <th>{{ui.colStatus}}</th>
+                        <th class="spalte-technisch">{{ui.colStatusDetail}}</th>
+                        <th class="spalte-technisch">{{ui.colProgress}}</th>
+                        <th class="spalte-technisch">{{ui.colTransferred}}</th>
+                        <th class="spalte-technisch">{{ui.colTotalSize}}</th>
+                        <th class="spalte-technisch">{{ui.colItems}}</th>
+                        <th class="spalte-technisch">{{ui.colBadItems}}</th>
+                        <th>{{ui.colSourceDb}}</th>
+                        <th>{{ui.colTargetDb}}</th>
+                        <th>{{ui.colBatch}}</th>
+                        <th class="spalte-technisch">{{ui.colStart}}</th>
+                        <th class="spalte-technisch">{{ui.colCompletion}}</th>
                     </tr>
                 </thead>
                 <tbody id="tabellenBody"></tbody>
@@ -4280,10 +4921,9 @@ $LightCSS
 
     <!-- Footer -->
     <div class="footer">
-        <p>Exchange MoveRequest Live-Dashboard | Version $SkriptVersion |
-           PowerShell HttpListener | Intervall: $AktualisierungsIntervall s |$LightFussnote
-           <a href="/api/data" target="_blank" style="color: #0078d4;">JSON-API</a> |
-           <a href="#" onclick="stopServer()" style="color: #dc3545;">Server stoppen</a>
+        <p>$SprachFusszeile$LightFussnote
+           <a href="/api/data" target="_blank" style="color: #0078d4;">{{ui.jsonApi}}</a> |
+           <a href="#" onclick="stopServer()" style="color: #dc3545;">{{ui.stopServer}}</a>
         </p>
     </div>
 
@@ -4294,6 +4934,25 @@ $LightCSS
         // Konfigurations-Variablen
         const INTERVALL = $AktualisierungsIntervall;
         const FETCH_TIMEOUT_MS = $($AbfrageTimeout * 1000);
+        const SPRACHE = '$SprachCode';
+
+        // Lokalisierte Texte (v2.16): vom Server je Sprache eingebettet,
+        // alle Zugriffe laufen ueber TXT('key').
+        const TEXTE = $JsJson;
+        function TXT(key) {
+            return (TEXTE && TEXTE[key]) ? TEXTE[key] : '[[' + key + ']]';
+        }
+
+        /**
+         * Sprachumschalter (v2.16): Cookie setzen und mit ?lang= neu laden.
+         */
+        function spracheUmschalten(lang) {
+            document.cookie = 'DashboardSprache=' + lang + '; path=/; max-age=31536000; SameSite=Strict';
+            const ziel = new URL(window.location.href);
+            ziel.searchParams.set('lang', lang);
+            window.location.href = ziel.toString();
+            return false;
+        }
 
         let updateZaehler = 0;
         let countdownTimer = null;
@@ -4313,7 +4972,7 @@ $LightCSS
             const anzahl = Math.max(0, parseInt(ziel, 10) || 0);
 
             if (anzahl === 0) {
-                feld.textContent = 'keine Postfächer gefunden';
+                feld.textContent = TXT('noMailboxes');
                 return;
             }
 
@@ -4324,10 +4983,10 @@ $LightCSS
 
             const timer = setInterval(function() {
                 wert = Math.min(anzahl, wert + Math.max(1, Math.ceil(anzahl / stufen)));
-                feld.textContent = wert + ' von ' + anzahl + ' Postfächern geladen';
+                feld.textContent = TXT('loadedOf').replace('%Done%', wert).replace('%Total%', anzahl);
                 if (wert >= anzahl) {
                     clearInterval(timer);
-                    feld.textContent = anzahl + (anzahl === 1 ? ' Postfach' : ' Postfächer') + ' geladen';
+                    feld.textContent = TXT(anzahl === 1 ? 'mailboxesLoadedOne' : 'mailboxesLoadedMany').replace('%Count%', anzahl);
                 }
             }, schritt);
         }
@@ -4351,10 +5010,10 @@ $LightCSS
 
             if (!fehler) {
                 if (overlayBenutzerFertig && !overlayDatenFertig) {
-                    text.textContent = 'Postfächer geladen - Dashboard-Daten werden noch abgefragt ...';
+                    text.textContent = TXT('dashboardDataPending');
                 }
                 else if (overlayDatenFertig && !overlayBenutzerFertig) {
-                    text.textContent = 'Dashboard-Daten da - Postfächer werden im Hintergrund geladen ...';
+                    text.textContent = TXT('dashboardDataReady');
                 }
             }
 
@@ -4425,7 +5084,7 @@ $LightCSS
                 dashboardAktualisieren(daten);
 
                 document.getElementById('fehlerBox').style.display = 'none';
-                liveAnzeigen('#28a745', 'LIVE');
+                liveAnzeigen('#28a745', TXT('live'));
 
             } catch (fehler) {
                 const zeitUeber = fehler.name === 'AbortError';
@@ -4433,11 +5092,10 @@ $LightCSS
                 console.error('Dashboard: /api/data fehlgeschlagen -', fehler);
                 const box = document.getElementById('fehlerBox');
                 box.textContent = zeitUeber
-                    ? 'Zeitüberschreitung nach ' + (FETCH_TIMEOUT_MS / 1000) + ' s. ' +
-                      'Der Server sammelt noch oder ist blockiert. Letzte bekannte Daten bleiben stehen.'
-                    : 'Verbindung zum Server verloren: ' + fehler.message;
+                    ? TXT('timeout').replace('%Seconds%', (FETCH_TIMEOUT_MS / 1000))
+                    : TXT('connectionLost').replace('%Message%', fehler.message);
                 box.style.display = 'block';
-                liveAnzeigen('#dc3545', zeitUeber ? 'TIMEOUT' : 'OFFLINE');
+                liveAnzeigen('#dc3545', zeitUeber ? TXT('timeoutStatus') : TXT('offline'));
             } finally {
                 clearTimeout(zeitgeber);
                 abrufLaeuft = false;
@@ -4462,7 +5120,7 @@ $LightCSS
         // ================================================================
         function dashboardAktualisieren(daten) {
             document.getElementById('zeitstempelAnzeige').textContent =
-                'Letzte Aktualisierung: ' + daten.Zeitstempel;
+                TXT('lastUpdate').replace('%Zeit%', daten.Zeitstempel);
 
             // Diagnosezeile: Datenalter und Dauer der letzten Sammlung
             const alter = daten.AlterSekunden || 0;
@@ -4471,9 +5129,9 @@ $LightCSS
             const offen  = daten.DetailOffen || 0;
             const alterEl = document.getElementById('alterAnzeige');
             alterEl.textContent =
-                'Datenalter: ' + alter + ' s | Letzte Sammlung dauerte: ' + dauer + ' s' +
-                (offen > 0 ? ' | Detaildaten offen: ' + offen : '') +
-                (fehler > 0 ? ' | Fehlgeschlagen: ' + fehler : '');
+                TXT('dataAge').replace('%Alter%', alter).replace('%Dauer%', dauer) +
+                (offen > 0 ? TXT('detailPending').replace('%Count%', offen) : '') +
+                (fehler > 0 ? TXT('failedCount').replace('%Count%', fehler) : '');
             alterEl.classList.toggle('veraltet', alter > 60);
 
             // Serverseitiger Hinweis (z.B. Teilausfall einzelner Jobs) separat
@@ -4491,7 +5149,7 @@ $LightCSS
             gesamtEl.classList.add('fade-update');
 
             document.getElementById('updateZaehler').textContent =
-                'Updates: ' + updateZaehler;
+                TXT('updates') + ' ' + updateZaehler;
 
             // Update-Badge (v2.15): einblenden, sobald der serverseitige
             // Check eine neuere GitLab-Version meldet; Klick oeffnet die
@@ -4500,7 +5158,7 @@ $LightCSS
             const updBadge = document.getElementById('updateBadge');
             if (updBadge) {
                 if (daten.UpdateVerfuegbar && daten.UpdateUrl) {
-                    updBadge.textContent = 'Update verfügbar: ' + (daten.UpdateTag || '');
+                    updBadge.textContent = TXT('updateAvailable').replace('%Tag%', (daten.UpdateTag || ''));
                     updBadge.href = daten.UpdateUrl;
                     updBadge.style.display = '';
                 } else {
@@ -4520,7 +5178,7 @@ $LightCSS
             container.innerHTML = '';
 
             if (!gruppen || gruppen.length === 0) {
-                container.innerHTML = '<div style="color:#888;padding:20px;">Keine Daten vorhanden.</div>';
+                container.innerHTML = '<div style="color:#888;padding:20px;">' + TXT('noData') + '</div>';
                 return;
             }
 
@@ -4562,7 +5220,7 @@ $LightCSS
 
             if (!details || details.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="13" style="text-align:center;color:#888;padding:30px;">' +
-                    'Keine MoveRequests vorhanden.</td></tr>';
+                    TXT('noMoveRequests') + '</td></tr>';
                 // Sortierhinweis ausblenden
                 document.getElementById('sortierHinweis').style.display = 'none';
                 // Auswaehlbare Zeilen gibt es keine mehr -> Auswahl leeren
@@ -4605,7 +5263,7 @@ $LightCSS
                     const trennZeile = document.createElement('tr');
                     trennZeile.className = 'trenn-zeile';
                     trennZeile.innerHTML =
-                        '<td colspan="13">&#9660; Abgeschlossene / Inaktive Jobs</td>';
+                        '<td colspan="13">&#9660; ' + TXT('completedInactiveJobs') + '</td>';
                     tbody.appendChild(trennZeile);
                     trennlinieEingefuegt = true;
                 }
@@ -4626,20 +5284,20 @@ $LightCSS
                 // Ursache und ein Warnzeichen, damit sie nicht wie eine
                 // fertige Zeile mit 0 % aussieht.
                 if (d.StatistikFehler) {
-                    tr.setAttribute('title', 'Statistik nicht abrufbar: ' + (d.Nachricht || 'unbekannte Ursache'));
+                    tr.setAttribute('title', TXT('statsUnavailable').replace('%Cause%', (d.Nachricht || TXT('unknownCause'))));
                     tr.style.backgroundColor = '#fff8e1';
                 }
                 else if (d.DetailOffen) {
                     // Grunddaten-Lauf: die Statistik kommt im naechsten Poll.
                     // Absichtlich KEIN Warnzeichen und KEIN Gelb - das ist
                     // kein Fehler, nur ein noch offener Detailabruf.
-                    tr.setAttribute('title', 'Detaildaten werden nachgeladen.');
+                    tr.setAttribute('title', TXT('detailsLoading'));
                 }
 
                 // Warnzeichen nur anhaengen, wenn es wirklich ein Fehler ist
                 var nameZelle = '<strong>' + escapeHtml(d.DisplayName) + '</strong>';
                 if (d.StatistikFehler) {
-                    nameZelle += ' <span title="' + escapeHtml(d.Nachricht || 'unbekannte Ursache') +
+                    nameZelle += ' <span title="' + escapeHtml(d.Nachricht || TXT('unknownCause')) +
                         '" style="color:#b8860b;font-weight:bold;">&#9888;</span>';
                 }
 
@@ -4657,7 +5315,7 @@ $LightCSS
                     fortschrittZelle =
                         '<div class="fortschritt-container">' +
                             '<div class="fortschritt-balken" style="width:100%;background-color:#e9ecef;color:#868e96;"' +
-                                ' title="Detaildaten werden nachgeladen">…</div>' +
+                                ' title="' + TXT('detailsLoadingTitle') + '">…</div>' +
                         '</div>';
                 }
 
@@ -4676,8 +5334,7 @@ $LightCSS
                     // Kaestchen fuer die Mehrfachauswahl (v2.7): links vom
                     // Badge, der Einzel-Button bleibt daneben stehen.
                     statusZelle =
-                        '<label class="zeilen-auswahl" title="Auswählen, um mehrere ' +
-                                'Verschiebeanforderungen gemeinsam abzuschließen">' +
+                        '<label class="zeilen-auswahl" title="' + TXT('selectToComplete') + '">' +
                             '<input type="checkbox" data-identity="' + escapeHtml(d.Identity) + '"' +
                                 ' data-name="' + escapeHtml(d.DisplayName) + '"' +
                                 (moveAuswahl.has(d.Identity) ? ' checked' : '') +
@@ -4688,9 +5345,9 @@ $LightCSS
                         ' <button type="button" class="mini-schalter auftrag-knopf" ' +
                             'data-identity="' + escapeHtml(d.Identity) + '" ' +
                             'data-name="' + escapeHtml(d.DisplayName) + '" ' +
-                            'title="Diese Verschiebeanforderung abschließen (Resume-MoveRequest)" ' +
+                            'title="' + TXT('completeTitle') + '" ' +
                             'onclick="anforderungAbschliessen(this.dataset.identity, this.dataset.name)">' +
-                            '&#8635; Abschließen</button>';
+                            '&#8635; ' + TXT('complete') + '</button>';
                 }
 
                 tr.innerHTML =
@@ -4821,8 +5478,8 @@ $LightCSS
                 });
             } catch (fehler) {
                 document.getElementById('benutzerListe').innerHTML =
-                    '<div style="color:#dc3545;padding:10px;">Datenbanken konnten nicht geladen werden: ' +
-                    escapeHtml(fehler.message) + '</div>';
+                    '<div style="color:#dc3545;padding:10px;">' +
+                    TXT('databasesLoadError').replace('%Message%', escapeHtml(fehler.message)) + '</div>';
             }
         }
 
@@ -4875,7 +5532,7 @@ $LightCSS
             const textFeld = document.getElementById('ladeText');
             const zahlFeld = document.getElementById('ladeZahl');
 
-            textFeld.textContent = 'Postfächer werden geladen ...';
+            textFeld.textContent = TXT('mailboxesLoading');
             textFeld.style.color = '';
             textFeld.dataset.fehler = '';
             if (!overlayAusgeblendet) { zahlFeld.textContent = ''; }
@@ -4884,7 +5541,7 @@ $LightCSS
             // (Quellenwechsel, Abschluss eines Auftrags) darf die bereits
             // markierten Postfaecher nicht wegwerfen. Die Bereinigung
             // gegen den frischen Stand uebernimmt benutzerZeichnen().
-            liste.innerHTML = '<div style="color:#888;padding:10px;">Postfächer werden geladen ...</div>';
+            liste.innerHTML = '<div style="color:#888;padding:10px;">' + TXT('mailboxesLoading') + '</div>';
 
             try {
                 const adresse = benutzerApiAdresse(
@@ -4902,7 +5559,7 @@ $LightCSS
 
                 // Zaehler im Overlay hochlaufen lassen, dann die Liste zeichnen
                 if (!overlayAusgeblendet) {
-                    textFeld.textContent = 'Postfächer abgefragt - Liste wird aufgebaut ...';
+                    textFeld.textContent = TXT('mailboxesQueried');
                     zaehleHoch(benutzerDaten.length);
                 }
 
@@ -4910,11 +5567,11 @@ $LightCSS
             } catch (fehler) {
                 benutzerDaten = [];
                 auswahl       = new Set();
-                liste.innerHTML = '<div style="color:#dc3545;padding:10px;">Fehler beim Laden der Postfächer: ' +
-                    escapeHtml(fehler.message) + '</div>';
+                liste.innerHTML = '<div style="color:#dc3545;padding:10px;">' +
+                    TXT('mailboxesLoadError').replace('%Message%', escapeHtml(fehler.message)) + '</div>';
 
                 if (!overlayAusgeblendet) {
-                    textFeld.textContent = 'Fehler beim Laden der Postfächer: ' + fehler.message;
+                    textFeld.textContent = TXT('mailboxesLoadError').replace('%Message%', fehler.message);
                     textFeld.style.color = '#dc3545';
                     textFeld.dataset.fehler = '1';
                 }
@@ -4962,7 +5619,7 @@ $LightCSS
             const sichtbar = sichtbareBenutzer();
 
             if (sichtbar.length === 0) {
-                liste.innerHTML = '<div style="color:#888;padding:10px;">Keine passenden Postfächer gefunden.</div>';
+                liste.innerHTML = '<div style="color:#888;padding:10px;">' + TXT('noMatchingMailboxes') + '</div>';
                 document.getElementById('benutzerHinweis').textContent = hinweisText(0);
                 auswahlAktualisieren();
                 return;
@@ -4986,7 +5643,7 @@ $LightCSS
 
                 const text = document.createElement('span');
                 text.textContent = benutzerAnzeige(b) +
-                    (b.Bewegt ? ' (bereits in Bewegung: ' + b.Status + ')' : '');
+                    (b.Bewegt ? ' (' + TXT('alreadyMoving').replace('%Status%', b.Status) + ')' : '');
 
                 // Postfachart (Arbitration, AuditLog, AuxAuditLog,
                 // PublicFolder, Archiv, ...) - nur bei Sonderpostfaechern
@@ -5034,14 +5691,17 @@ $LightCSS
             const typ     = typFeld ? (typFeld.value || 'benutzer') : 'benutzer';
 
             const artText = {
-                benutzer: 'Benutzerpostfächer',
-                sonder:   'Sonderpostfächer',
-                archiv:   'Postfächer mit Archiv',
-                alle:     'Benutzer- und Sonderpostfächer'
-            }[typ] || 'Postfächer';
+                benutzer: TXT('mailboxTypeUser'),
+                sonder:   TXT('mailboxTypeSpecial'),
+                archiv:   TXT('mailboxTypeArchive'),
+                alle:     TXT('mailboxTypeAll')
+            }[typ] || TXT('mailboxes');
 
-            return sichtbar + ' von ' + benutzerDaten.length + ' ' + artText + ' sichtbar' +
-                (quelle ? ' (Quelle: ' + quelle + ')' : ' (alle Datenbanken)');
+            return TXT('visibleOf')
+                .replace('%Visible%', sichtbar)
+                .replace('%Total%', benutzerDaten.length)
+                .replace('%Type%', artText)
+                + (quelle ? TXT('source').replace('%Source%', quelle) : TXT('allDatabases'));
         }
 
         function benutzerFiltern() {
@@ -5061,7 +5721,7 @@ $LightCSS
 
         function auswahlAktualisieren() {
             document.getElementById('auswahlZahl').textContent =
-                auswahl.size + ' Postfach/Postfächer ausgewählt';
+                TXT('selected').replace('%Count%', auswahl.size);
         }
 
         /**
@@ -5071,10 +5731,7 @@ $LightCSS
             const suspend = document.querySelector('input[name="versandModus"]:checked').value === 'suspend';
             const hinweis = document.getElementById('modusHinweis');
 
-            hinweis.textContent = suspend
-                ? 'Der MoveRequest wird vor dem Abschluss angehalten (ReadyToComplete, klassische 95-%-Stufe). ' +
-                  'Die Finalisierung erfolgt später, z. B. per Resume-MoveRequest - das Postfach wird vorher nicht gesperrt.'
-                : 'Die Postfächer werden vollständig in die Ziel-Datenbank migriert und danach abgeschlossen.';
+            hinweis.textContent = suspend ? TXT('modeSuspendHint') : TXT('modeDirectHint');
         }
 
         /**
@@ -5085,13 +5742,13 @@ $LightCSS
             const knopf = document.getElementById('versandSchalter');
 
             if (wert === 'nur') {
-                knopf.innerHTML = '&#128269; Nur prüfen (WhatIf)';
+                knopf.innerHTML = '&#128269; ' + TXT('checkOnly');
             }
             else if (wert === 'pruefen') {
-                knopf.innerHTML = '&#9654; Prüfen und verschieben';
+                knopf.innerHTML = '&#9654; ' + TXT('checkAndMove');
             }
             else {
-                knopf.innerHTML = '&#9654; Verschiebeanforderung starten';
+                knopf.innerHTML = '&#9654; ' + TXT('startMove');
             }
         }
 
@@ -5099,9 +5756,9 @@ $LightCSS
          * Anzeigetext fuer den gewaehlten Vorabtest.
          */
         function vorabtestText(wert) {
-            if (wert === 'nur')   { return 'nur prüfen (nichts verschieben)'; }
-            if (wert === 'pruefen') { return 'erst prüfen, dann verschieben'; }
-            return 'aus (sofort verschieben)';
+            if (wert === 'nur')   { return TXT('pretestOnly'); }
+            if (wert === 'pruefen') { return TXT('pretestCheckThenMove'); }
+            return TXT('pretestOff');
         }
 
         /**
@@ -5133,23 +5790,20 @@ $LightCSS
 
             // Quelle darf leer sein - dann werden alle ausgewaehlten
             // Postfaecher (Liste zeigt ohnehin alle) verschoben.
-            if (!ziel)   { zeigeVersandMeldung('Bitte eine Ziel-Datenbank auswählen.', true); return; }
-            if (quelle === ziel) { zeigeVersandMeldung('Quell- und Ziel-Datenbank sind identisch.', true); return; }
-            if (benutzer.length === 0) { zeigeVersandMeldung('Bitte mindestens ein Postfach auswählen.', true); return; }
+            if (!ziel)   { zeigeVersandMeldung(TXT('selectTarget'), true); return; }
+            if (quelle === ziel) { zeigeVersandMeldung(TXT('sameDb'), true); return; }
+            if (benutzer.length === 0) { zeigeVersandMeldung(TXT('selectMailbox'), true); return; }
 
             const suspend = (document.querySelector('input[name="versandModus"]:checked').value === 'suspend');
             const nurPruefen = (vorabtest === 'nur');
 
-            const frage = benutzer.length + ' Postfach/Postfächer '
-                + (nurPruefen ? 'in der Datenbank "' + ziel + '" nur prüfen (WhatIf)?'
-                              : 'in die Datenbank "' + ziel + '" verschieben?')
-                + '\n\nQuelle: ' + (quelle || 'alle Datenbanken')
-                + '\nPriorität: ' + prioritaet
-                + '\nBadItems überspringen: ' + badItems
-                + '\nVorabtest: ' + vorabtestText(vorabtest)
-                + (nurPruefen ? '' : '\nModus: ' + (suspend
-                    ? 'bis 95 % laufen lassen und suspendieren'
-                    : 'direkt durchmigrieren'));
+            const frage = TXT(nurPruefen ? 'confirmCheckOnly' : 'confirmMove').replace('%Count%', benutzer.length).replace('%Target%', ziel)
+                + TXT('confirmMoveDetails')
+                    .replace('%Source%', quelle || TXT('allDatabases'))
+                    .replace('%Priority%', prioritaet)
+                    .replace('%BadItems%', badItems)
+                    .replace('%Pretest%', vorabtestText(vorabtest))
+                + (nurPruefen ? '' : TXT('confirmMode').replace('%Mode%', suspend ? TXT('modeSuspendShort') : TXT('modeDirectShort')));
 
             if (!confirm(frage)) return;
 
@@ -5157,8 +5811,8 @@ $LightCSS
             const schalter = document.getElementById('versandSchalter');
             schalter.disabled = true;
             zeigeVersandMeldung(nurPruefen
-                ? 'WhatIf-Prüfung wird gestartet ...'
-                : 'Auftrag wird gestartet ...', false);
+                ? TXT('whatIfStarted')
+                : TXT('jobStarted'), false);
 
             try {
                 const response = await fetch('/api/move', {
@@ -5178,16 +5832,16 @@ $LightCSS
                 const daten = await response.json().catch(function() { return {}; });
 
                 if (!response.ok || daten.Fehler) {
-                    zeigeVersandMeldung('Fehler: ' + escapeHtml(daten.Fehler || ('HTTP ' + response.status)), true);
+                    zeigeVersandMeldung(TXT('errorPrefix').replace('%Message%', escapeHtml(daten.Fehler || ('HTTP ' + response.status))), true);
                     return;
                 }
 
-                zeigeVersandMeldung(
-                    '<strong>Auftrag #' + escapeHtml(daten.AuftragId) + ' gestartet.</strong><br>' +
+                zeigeVersandMelding(
+                    '<strong>' + TXT('jobStartedStrong').replace('%Id%', escapeHtml(daten.AuftragId)) + '</strong><br>' +
                     escapeHtml(daten.Meldung), false);
                 statusAbfragenStarten();
             } catch (fehler) {
-                zeigeVersandMeldung('Fehler: ' + escapeHtml(fehler.message), true);
+                zeigeVersandMeldung(TXT('errorPrefix').replace('%Message%', escapeHtml(fehler.message)), true);
             } finally {
                 versandLaueuft = false;
                 schalter.disabled = false;
@@ -5291,17 +5945,14 @@ $LightCSS
          */
         function anforderungAbschliessen(identity, name) {
             moveAktionStarten('Resume', '', false,
-                'Verschiebeanforderung von "' + name + '" abschließen?\n\n' +
-                'Resume-MoveRequest für genau diese Anforderung:\n' +
-                'die Verschiebung läuft danach bis zum Abschluss weiter.',
+                TXT('confirmResumeOne').replace('%Name%', name),
                 identity);
         }
 
         /** ALLE suspendierten Anforderungen fortsetzen. */
         function alleSuspendAbschliessen() {
             moveAktionStarten('Resume', '', true,
-                'Alle suspendierten MoveRequests fortsetzen?\n\n' +
-                'Resume-MoveRequest für jede suspendierte Anforderung (alle Batches).');
+                TXT('confirmResumeAll'));
         }
 
         // ================================================================
@@ -5376,14 +6027,11 @@ $LightCSS
 
             const namen = ids.map(function(id) { return moveAuswahlNamen.get(id) || id; });
             const liste = namen.slice(0, 10).map(function(n) { return '  • ' + n; }).join('\n');
-            const rest  = namen.length > 10 ? '\n  … und ' + (namen.length - 10) + ' weitere' : '';
+            const rest  = namen.length > 10 ? TXT('andMore').replace('%Count%', namen.length - 10) : '';
 
             const frage =
-                (namen.length === 1
-                    ? '1 ausgewählte Verschiebeanforderung abschließen?'
-                    : namen.length + ' ausgewählte Verschiebeanforderungen abschließen?') +
-                '\n\nResume-MoveRequest für:\n' + liste + rest +
-                '\n\nDie Verschiebungen laufen danach bis zum Abschluss weiter.';
+                TXT(namen.length === 1 ? 'confirmCompleteSelectedOne' : 'confirmCompleteSelectedMany').replace('%Count%', namen.length) +
+                TXT('confirmCompleteSelectedDetails').replace('%List%', liste).replace('%Rest%', rest);
 
             moveAktionStarten('Resume', '', false, frage, ids);
         }
@@ -5446,17 +6094,13 @@ $LightCSS
         /** Abgeschlossene Anforderungen EINES Batches entfernen. */
         function loescheAbgeschlossene(batch) {
             moveAktionStarten('Entfernen', batch, false,
-                'Abgeschlossene Anforderungen im Batch "' + batch + '" löschen?\n\n' +
-                'Remove-MoveRequest - nur die MoveRequest-Einträge werden entfernt, ' +
-                'die Postfächer bleiben unberührt.');
+                TXT('confirmDeleteBatch').replace('%Batch%', batch));
         }
 
         /** ALLE abgeschlossenen Anforderungen entfernen. */
         function alleAbgeschlossenenLoeschen() {
             moveAktionStarten('Entfernen', '', true,
-                'Alle abgeschlossenen MoveRequests löschen?\n\n' +
-                'Remove-MoveRequest - nur die MoveRequest-Einträge werden entfernt, ' +
-                'die Postfächer bleiben unberührt.');
+                TXT('confirmDeleteAll'));
         }
 
         /**
@@ -5490,7 +6134,7 @@ $LightCSS
                     statusZeitgeber = setTimeout(statusAbfragen, 8000);
                 } else {
                     statusZeitgeber = null;
-                    zeigeVersandMeldung('Statusabfrage fehlgeschlagen: ' + escapeHtml(fehler.message), true);
+                    zeigeVersandMeldung(TXT('statusQueryFailed').replace('%Message%', escapeHtml(fehler.message)), true);
                 }
             }
         }
@@ -5513,8 +6157,8 @@ $LightCSS
             let html = '';
 
             auftraege.slice(0, 10).forEach(function(a) {
-                const laeuft    = (a.Status === 'Laufend');
-                const kopfFarbe = laeuft ? '#0078d4' : (a.Status === 'Abgeschlossen' && a.Fehler === 0 ? '#28a745' : '#dc3545');
+                const laeuft    = (a.Status === TXT('statusRunning'));
+                const kopfFarbe = laeuft ? '#0078d4' : (a.Status === TXT('statusCompleted') && a.Fehler === 0 ? '#28a745' : '#dc3545');
                 // Ohne Art liegt ein Auftrag aus alter Version vor - dann
                 // gilt wie bisher 'Verschiebung'.
                 const art       = a.Art || 'Verschiebung';
@@ -5526,18 +6170,18 @@ $LightCSS
                 if (aktion) {
                     kopfText = ' – ' + escapeHtml(a.Erstellt) + '/' + escapeHtml(a.Gesamt) +
                         (art === 'Resume'
-                            ? ' suspendierte Anforderungen fortgesetzt'
-                            : ' abgeschlossene Anforderungen entfernt') +
-                        ', ' + escapeHtml(a.Fehler) + ' Fehler';
+                            ? ' ' + TXT('resumeDone')
+                            : ' ' + TXT('removeDone')) +
+                        ', ' + escapeHtml(a.Fehler) + ' ' + TXT('errors');
                 } else {
-                    kopfText = ' – ' + escapeHtml(a.Erstellt) + '/' + escapeHtml(a.Gesamt) + ' MoveRequests erstellt' +
-                        ', ' + escapeHtml(a.Fehler) + ' Fehler' +
+                    kopfText = ' – ' + escapeHtml(a.Erstellt) + '/' + escapeHtml(a.Gesamt) + ' ' + TXT('moveRequestsCreated') +
+                        ', ' + escapeHtml(a.Fehler) + ' ' + TXT('errors') +
                         ' | ' + escapeHtml(a.Quelle) + ' &#8594; ' + escapeHtml(a.Ziel) +
-                        (a.Suspend ? ' | suspendieren vor Abschluss' : ' | durchmigrieren') +
-                        (a.Prioritaet ? ' | Priorität: ' + escapeHtml(a.Prioritaet) : '') +
-                        (a.BadItemLimit ? ' | BadItems: ' + escapeHtml(a.BadItemLimit) : '') +
+                        (a.Suspend ? ' | ' + TXT('suspendBeforeComplete') : ' | ' + TXT('migrateThrough')) +
+                        (a.Prioritaet ? ' | ' + TXT('priorityLabel').replace('%Value%', escapeHtml(a.Prioritaet)) : '') +
+                        (a.BadItemLimit ? ' | ' + TXT('badItemsLabel').replace('%Value%', escapeHtml(a.BadItemLimit)) : '') +
                         (a.Vorabtest && a.Vorabtest !== 'aus'
-                            ? ' | WhatIf: ' + (a.Vorabtest === 'nur' ? 'nur prüfen' : 'prüfen + verschieben')
+                            ? ' | WhatIf: ' + (a.Vorabtest === 'nur' ? TXT('whatIfOnly') : TXT('whatIfCheckMove'))
                             : '');
                 }
 
@@ -5545,8 +6189,8 @@ $LightCSS
                     '<strong style="color:' + kopfFarbe + ';">#' + escapeHtml(a.Id) + ' ' +
                         escapeHtml(a.Status) + '</strong>' +
                     kopfText +
-                    (a.BatchName ? ' | Batch: ' + escapeHtml(a.BatchName) : '') +
-                    ' | Start: ' + escapeHtml(a.Start) +
+                    (a.BatchName ? ' | ' + TXT('batchLabel').replace('%Value%', escapeHtml(a.BatchName)) : '') +
+                    ' | ' + TXT('startLabel').replace('%Value%', escapeHtml(a.Start)) +
                     '</div>';
 
                 if (a.Meldung) {
@@ -5569,12 +6213,12 @@ $LightCSS
                         knoepfe += '<button type="button" class="mini-schalter auftrag-knopf" ' +
                             'data-batch="' + escapeHtml(a.BatchName) + '" ' +
                             'onclick="resumeAbschliessen(this.dataset.batch)">' +
-                            '&#8635; Suspendierte abschließen</button>';
+                            '&#8635; ' + TXT('resumeSuspended') + '</button>';
                     }
                     knoepfe += '<button type="button" class="mini-schalter auftrag-knopf" ' +
                         'data-batch="' + escapeHtml(a.BatchName) + '" ' +
                         'onclick="loescheAbgeschlossene(this.dataset.batch)">' +
-                        '&#10005; Abgeschlossene löschen</button>';
+                        '&#10005; ' + TXT('deleteCompleted') + '</button>';
                     html += '<div class="auftrag-knoepfe">' + knoepfe + '</div>';
                 }
             });
@@ -5616,14 +6260,14 @@ $LightCSS
         // Server stoppen
         // ================================================================
         async function stopServer() {
-            if (confirm('Möchten Sie den Dashboard-Server wirklich stoppen?')) {
+            if (confirm(TXT('confirmStop'))) {
                 if (pollTimer) clearTimeout(pollTimer);
                 try {
                     await fetch('/api/stop');
-                    liveAnzeigen('#dc3545', 'GESTOPPT');
-                    alert('Server wurde gestoppt.');
+                    liveAnzeigen('#dc3545', TXT('stopped'));
+                    alert(TXT('serverStopped'));
                 } catch (e) {
-                    alert('Server gestoppt (Verbindung getrennt).');
+                    alert(TXT('serverStoppedDisconnected'));
                 }
             }
         }
@@ -5633,9 +6277,9 @@ $LightCSS
         // ================================================================
         (function() {
             document.getElementById('ladeOverlay').style.display = 'flex';
-            document.getElementById('ladeText').textContent = 'Datenbanken und Postfächer werden geladen ...';
+            document.getElementById('ladeText').textContent = TXT('loadingStart');
             document.getElementById('ladeZahl').textContent = '';
-            liveAnzeigen('#6c757d', 'START');
+            liveAnzeigen('#6c757d', TXT('start'));
             // Verschiebeanforderung vorbereiten: Datenbanken, Postfaecher
             // (ohne Quell-DB = alle) und Hinweistext
             modusGeaendert();
@@ -5652,7 +6296,8 @@ $LightCSS
 </html>
 "@
 
-    return $HTML
+    # Alle {{key}}-Platzhalter durch die lokalisierten Texte ersetzen
+    return Resolve-SprachPlatzhalter -Text $HTML -SprachCode $SprachCode
 }
 
 # ============================================================================
@@ -6017,8 +6662,9 @@ try {
             switch ($AngefragterPfad) {
 
                 "/" {
+                    $SprachCode = Get-AnfrageSprache -Anfrage $Anfrage
                     Sende-Antwort -Antwort $Antwort `
-                                  -Inhalt (Get-DashboardHTML) `
+                                  -Inhalt (Get-DashboardHTML -SprachCode $SprachCode) `
                                   -ContentType "text/html; charset=utf-8" `
                                   -StatusCode 200
                 }
