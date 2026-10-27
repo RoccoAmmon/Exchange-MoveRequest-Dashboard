@@ -65,7 +65,7 @@
     Autor:          Rocco Ammon
     Erstelldatum:   26.02.2026
     Stand:          16.10.2026
-    Version:        2.15 (Update-Check gegen die GitLab-Releases-API:
+    Version:        2.16 (Update-Check gegen die GitLab-Releases-API:
                             GUI-Badge und Log-Hinweis, abschaltbar mit
                             -KeinUpdateCheck)
     Voraussetzung:  Exchange Server 2019 oder SE (Subscription Edition),
@@ -711,6 +711,114 @@ msg.statsUnavailable=Statistik nicht abrufbar
 msg.mailboxQueryFailed=Postfachabfrage '%Source%' schlug fehl: %Error%
 msg.elevationDeniedText=Das Skript wurde NICHT als Administrator gestartet (UAC abgelehnt).\n\nSystem- und Arbitration-Postfaecher lassen sich dann nicht verschieben - Exchange meldet 'Der Zugriff wurde verweigert'.\n\nBitte erneut starten und der UAC-Frage zustimmen.
 msg.elevationDeniedTitle=Exchange-MoveRequest-Dashboard - ohne Admin-Rechte
+
+# --- Konsole und Logdatei (v2.16) ----------------------------------------
+log.level.info=INFO
+log.level.warn=WARNUNG
+log.level.error=FEHLER
+log.level.silent=STILL
+log.stopSent=/api/stop an die andere Instanz gesendet.
+log.stopFailed=/api/stop nicht moeglich: %Error%
+log.foreignService=%Phase%: Auf Port %Port% antwortet ein fremder Dienst - der Start wird voraussichtlich fehlschlagen.
+log.hint=HINWEIS: %Message%
+log.otherInstanceOne=Es laeuft bereits eine weitere Dashboard-Instanz:
+log.otherInstanceMany=Es laeuft bereits %Count% weitere Dashboard-Instanzen:
+log.processLine=  PID %Pid% (%Process%): %CommandLine%
+log.noProcessConsole=  (kein Prozess mit Skriptnamen gefunden - vermutlich in einer offenen Konsole gestartet)
+log.alreadyRunningNoStop=%Phase%: Auf Port %Port% laeuft bereits ein Dashboard - wird NICHT gestoppt (-KeinAutoStopp).
+log.alreadyRunningStop=%Phase%: Auf Port %Port% laeuft bereits ein Dashboard - die alte Instanz wird jetzt beendet.
+log.runningInstance=  Laufende Instanz: PID %Pid% (%Process%), Port %Port%: %CommandLine%
+log.noProcessStop=  (kein Prozess mit Skriptnamen gefunden - Konsole? Der Stopp laeuft trotzdem ueber /api/stop)
+log.forceKill=  Sauberer Stopp reichte nicht - beende hart: PID %Pid% (%Process%)
+log.killFailed=  PID %Pid% konnte nicht beendet werden: %Error%
+log.oldStopped=%Phase%: Alte Instanz beendet - %Url% ist frei, der Start kann weitergehen.
+log.rotated=== Log rotiert: vorige Datei liegt als %File% vor ===
+log.suppressed=    ==> %Count%x in den letzten %Seconds%s aufgetreten, nicht einzeln protokolliert
+log.moveJobStarted=Verschiebeauftrag #%Id% gestartet: %Count% Postfach/Postfaecher, '%Source%' -> '%Target%', Prioritaet: %Priority%, BadItemLimit: %BadItemLimit%, Vorabtest: %Pretest%, Modus: %Mode%, Batch: %Batch%
+log.actionJobResumed=%Label% #%Id% abgeschlossen: %Done% suspendierte Anforderung/Anforderungen fortgesetzt.
+log.actionJobRemoved=%Label% #%Id% abgeschlossen: %Done% abgeschlossene Anforderung/Anforderungen entfernt.
+log.actionJobChecked=%Label% #%Id% abgeschlossen: WhatIf-Pruefung, %Done% von %Total% bestanden.
+log.actionJobCreated=%Label% #%Id% abgeschlossen: %Done% MoveRequest(s) erstellt.
+log.actionJobFailed=%Label% #%Id% %Status%: %Done% %Action%, %Errors% Fehler. %Message%
+log.moveJob=Verschiebeauftrag
+log.actionWordCreated=erstellt
+log.actionWordResumed=fortgesetzt
+log.actionWordRemoved=entfernt
+log.modeSuspend=suspendieren vor dem Abschluss (95 %)
+log.modeDirect=durchgaengige Migration
+log.pretestCheckMove=Vorabtest mit -WhatIf, danach erstellen
+log.pretestOnly=nur -WhatIf-Pruefung, nichts erstellen
+log.pretestNone=kein Vorabtest
+log.badItems=BadItems: %Value%
+log.startWhatIfOnly=%Count% Postfach/Postfaecher werden nur mit -WhatIf geprueft - es wird nichts verschoben (Batch: %Batch%).
+log.startCheckThen=%Count% Postfach/Postfaecher werden zuerst mit -WhatIf geprueft und danach nach '%Target%' verschoben (Prioritaet: %Priority%, %BadItems%, Batch: %Batch%).
+log.startDirect=%Count% Postfach/Postfaecher werden nach '%Target%' verschoben (Prioritaet: %Priority%, %BadItems%, Batch: %Batch%).
+log.runningInstanceOnly=  Laufende Instanz: %Instance%
+log.scriptFailed=Skript wurde mit Fehlern beendet. Details siehe Log: %Path%
+log.netshAcl=  netsh http add urlacl url=%Url% user=%User%
+log.actionStarted=MoveRequest-Aktion #%Id% gestartet: %Action%, %Count%, Auswahl: %Selection%
+log.statsPoolOpen=Statistik-Pool mit bis zu %Count% parallelen Abrufen geoeffnet.
+log.statsPoolFailed=Statistik-Pool nicht nutzbar: %Error%
+log.statsParallelEmpty=Paralleler Statistikabruf lieferte kein einziges Ergebnis - schalte ab und wiederhole sequenziell.
+log.cacheCollision=Cache-Kollision fuer Schluessel '%Key%' erkannt (Cache: '%Cached%', aktuell: '%Current%') - frage neu ab.
+log.statsFetchFailed=  Statistik-Abruf fehlgeschlagen fuer '%Name%': %Error%
+log.allFinished=Alle %Count% MoveRequests sind in einem Endzustand. Es wird nur noch alle %Seconds% s geprueft.
+log.apiError=API: %Error%
+log.apiMissingStats=API: %Count% MoveRequest(s) ohne Statistik (nur die ersten 3 einzeln protokolliert).
+log.apiCause=  Ursache (%Count%x): %Cause%
+log.envelopeHint=HINWEIS: Envelope-Groesse ist der Engpass. In einer Exchange Management Shell ausfuehren und Skript neu starten:
+log.envelopeCmd=  Set-PowerShellConfig -Identity WSMan:localhost -MaxEnvelopeSizeKb 16384
+log.updateAvailable=Update verfuegbar: %Tag% (aktuell v%Version%) - %Url%
+log.updateNone=Update-Check abgeschlossen: keine neuere Version als v%Version% gefunden.
+log.logDirCreated=Log-Verzeichnis erstellt: %Path%
+log.startBanner=== Live-Dashboard wird gestartet ===
+log.intervals=Intervall: %Interval% s | Snapshot-Cache: %Cache% s | Abfrage-Timeout: %Timeout% s | Leerlaufintervall: %Idle% s
+log.batchFilter=Batch-Filter aktiv: %Batch%
+log.lightMode=Light-Modus aktiv (-Light): es werden nur Statusdaten geliefert - Get-MoveRequestStatistics bleibt aus, technische Spalten sind im Dashboard ausgeblendet.
+log.noAdminNoPath=Ohne Admin-Rechte und ohne Skriptpfad (Start ueber eine Pipe?) - Weiterlauf ohne Erhoehung.
+log.elevationRequested=Ohne Admin-Rechte gestartet - Neustart als Administrator eingeleitet (UAC-Frage). Das Ausgangsfenster schliesst sich, der erhoehte Neustart uebernimmt.
+log.elevationDenied=Erhoehung abgelehnt (UAC) - das Skript laeuft NICHT als Administrator. System-/Arbitration-Postfaecher scheitern dann mit 'Der Zugriff wurde verweigert'.
+log.elevationFailed=Erhoehung fehlgeschlagen: %Error% - Weiterlauf ohne Admin-Rechte.
+log.otherInstanceKeeps=Die andere Instanz laeuft weiter und haelt %Url% - Start abgebrochen.
+log.manualSearch=  Manuell suchen: Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match 'Moverequest-Dashboard' } | Select-Object ProcessId, CommandLine
+log.startOtherPort=  Oder abweichend starten: .\Exchange-MoveRequest-Dashboard.ps1 -Port 9090
+log.expectedError32=Der Start wird voraussichtlich mit Fehler 32 scheitern - siehe Fehlerbehebung im Wiki.
+log.context=Ausfuehrungskontext: %Name%, Administrator: %Admin%, PowerShell %Version% (%Bitness%)
+log.updateDisabled=Update-Check deaktiviert (-KeinUpdateCheck).
+log.updateStarted=Update-Check gegen GitLab-Releases gestartet (Projekt-ID %Id%, asynchron).
+log.updateStartFailed=Update-Check konnte nicht gestartet werden: %Error%
+log.snapinLoading=Lade Exchange PowerShell Snap-In (2019/SE)...
+log.snapinLoaded=Exchange PowerShell Snap-In erfolgreich geladen.
+log.snapinAlreadyLoaded=Exchange PowerShell Snap-In ist bereits geladen.
+log.firstCollection=Erste Datensammlung wird durchgefuehrt ...
+log.firstCollectionDone=Erste Sammlung (Grunddaten): %Count% MoveRequest(s), %Details% Detailzeile(n), %Seconds%s
+log.detailsLater=Detaildaten (Prozent, Groessen, Zeiten) fuer %Count% Job(s) werden im naechsten Lauf nachgeholt.
+log.prefixHeld=Das Praefix '%Url%' haelt weiterhin eine andere Instanz.
+log.serverStartFailed=Fehler beim Starten des HTTP-Servers: %Error%
+log.prefixBusy=Das URL-Praefix '%Url%' war zwischen Pruefung und Start belegt - neuer Versuch (%Attempt% von %Max%) nach erneuter Freimachung.
+log.serverStarted=HTTP-Server gestartet auf: %Url%
+log.openBrowser=Dashboard im Browser oeffnen: %Url%
+log.stopHint=Zum Beenden: Strg+C oder im Dashboard 'Server stoppen' klicken.
+log.causePrefix=URSACHE: Das URL-Praefix '%Url%' war schon vergeben - fast immer durch ein zweites Dashboard. Auch die alte Version 'live_moverequest_statistik.ps1' reserviert denselben Port.
+log.diagnose=  %Text%
+log.help1=ABHILFE 1: die andere Instanz beenden (Fenster schliessen bzw. PID beenden).
+log.help2=ABHILFE 2: abweichend starten: .\Exchange-MoveRequest-Dashboard.ps1 -Port 9090
+log.help3=ABHILFE 3: zum Nachsehen IM FEHLERFALL: netstat -ano | findstr :%Port%  und  netsh http show urlacl | findstr :%Port%
+log.tip=TIPP: Skript als Administrator ausfuehren oder Port freigeben:
+log.browserOpened=Browser geoeffnet.
+log.browserFailed=Browser konnte nicht automatisch geoeffnet werden.
+log.serverStopRequested=Server-Stop angefordert.
+log.connectionClosed=Verbindung vom Browser geschlossen - Anfrage abgebrochen (beim Stoppen oder Schliessen des Tabs ganz normal).
+log.listenerError=HTTP-Listener Fehler: %Error%
+log.requestError=Fehler bei Anfrageverarbeitung: %Error%
+log.critical=KRITISCHER FEHLER: %Error%
+log.stack=Stack Trace: %Trace%
+log.serverStopped=HTTP-Server sauber heruntergefahren.
+log.stopFailed=Fehler beim Beenden des HTTP-Servers: %Error%
+log.jobsStopped=Offene Verschiebe-Jobs beendet.
+log.jobsStopFailed=Fehler beim Beenden der Verschiebe-Jobs: %Error%
+log.runtime=Laufzeit: %Minutes% min | %Collections% Sammlung(en), %Queries% Statistikabruf(e), %CacheHits% Cache-Treffer
+log.endBanner=== Live-Dashboard beendet ===
 '@
 
     en = @'
@@ -937,6 +1045,115 @@ msg.statsUnavailable=Statistics unavailable
 msg.mailboxQueryFailed=Mailbox query '%Source%' failed: %Error%
 msg.elevationDeniedText=The script was NOT started as administrator (UAC declined).\n\nSystem and arbitration mailboxes cannot be moved in this state - Exchange reports 'Access is denied'.\n\nPlease start it again and accept the UAC prompt.
 msg.elevationDeniedTitle=Exchange-MoveRequest-Dashboard - without administrator rights
+
+# --- Console and log file (v2.16) ----------------------------------------
+log.level.info=INFO
+log.level.warn=WARNING
+log.level.error=ERROR
+log.level.silent=SILENT
+log.stopSent=/api/stop sent to the other instance.
+log.stopFailed=/api/stop not possible: %Error%
+log.foreignService=%Phase%: port %Port% is answered by a foreign service - startup will probably fail.
+log.hint=NOTE: %Message%
+log.otherInstanceOne=Another dashboard instance is already running:
+log.otherInstanceMany=%Count% other dashboard instances are already running:
+log.processLine=  PID %Pid% (%Process%): %CommandLine%
+log.noProcessConsole=  (no process with the script name found - probably started in an open console)
+log.alreadyRunningNoStop=%Phase%: a dashboard is already running on port %Port% - NOT stopped (-KeinAutoStopp).
+log.alreadyRunningStop=%Phase%: a dashboard is already running on port %Port% - the old instance is being stopped now.
+log.runningInstance=  Running instance: PID %Pid% (%Process%), port %Port%: %CommandLine%
+log.noProcessStop=  (no process with the script name found - console? The stop is attempted via /api/stop anyway)
+log.forceKill=  Clean stop was not enough - terminating hard: PID %Pid% (%Process%)
+log.killFailed=  PID %Pid% could not be terminated: %Error%
+log.oldStopped=%Phase%: old instance stopped - %Url% is free, startup can continue.
+log.rotated=== Log rotated: the previous file is kept as %File% ===
+log.suppressed=    ==> occurred %Count%x in the last %Seconds% s, not logged individually
+log.moveJobStarted=Move job #%Id% started: %Count% mailbox/mailboxes, '%Source%' -> '%Target%', priority: %Priority%, BadItemLimit: %BadItemLimit%, pretest: %Pretest%, mode: %Mode%, batch: %Batch%
+log.actionJobResumed=%Label% #%Id% completed: %Done% suspended request/requests resumed.
+log.actionJobRemoved=%Label% #%Id% completed: %Done% completed request/requests removed.
+log.actionJobChecked=%Label% #%Id% completed: WhatIf check, %Done% of %Total% passed.
+log.actionJobCreated=%Label% #%Id% completed: %Done% move request(s) created.
+log.actionJobFailed=%Label% #%Id% %Status%: %Done% %Action%, %Errors% errors. %Message%
+log.missingRequests=Move request action: %Missing% of %Selected% selected requests not found: '%List%'.
+log.actionStarted=Move request action #%Id% started: %Action%, %Count%, selection: %Selection%
+log.statsPoolOpen=Statistics pool opened with up to %Count% parallel fetches.
+log.statsPoolFailed=Statistics pool not usable: %Error%
+log.statsParallelEmpty=Parallel statistics fetch returned no result at all - switching off and retrying sequentially.
+log.cacheCollision=Cache collision detected for key '%Key%' (cache: '%Cached%', current: '%Current%') - fetching again.
+log.statsFetchFailed=  Statistics fetch failed for '%Name%': %Error%
+log.allFinished=All %Count% move requests are in a final state. Checking only every %Seconds% s now.
+log.apiError=API: %Error%
+log.apiMissingStats=API: %Count% move request(s) without statistics (only the first 3 logged individually).
+log.apiCause=  Cause (%Count%x): %Cause%
+log.envelopeHint=NOTE: envelope size is the bottleneck. Run in an Exchange Management Shell and restart the script:
+log.envelopeCmd=  Set-PowerShellConfig -Identity WSMan:localhost -MaxEnvelopeSizeKb 16384
+log.updateAvailable=Update available: %Tag% (current v%Version%) - %Url%
+log.updateNone=Update check finished: no version newer than v%Version% found.
+log.logDirCreated=Log directory created: %Path%
+log.startBanner=== Live dashboard is starting ===
+log.intervals=Interval: %Interval% s | snapshot cache: %Cache% s | query timeout: %Timeout% s | idle interval: %Idle% s
+log.batchFilter=Batch filter active: %Batch%
+log.lightMode=Light mode active (-Light): only status data is delivered - Get-MoveRequestStatistics is skipped, technical columns are hidden in the dashboard.
+log.noAdminNoPath=Started without administrator rights and without a script path (started via a pipe?) - continuing without elevation.
+log.elevationRequested=Started without administrator rights - restart as administrator initiated (UAC prompt). The original window closes, the elevated restart takes over.
+log.elevationDenied=Elevation declined (UAC) - the script is NOT running as administrator. System/arbitration mailboxes will then fail with 'Access is denied'.
+log.elevationFailed=Elevation failed: %Error% - continuing without administrator rights.
+log.otherInstanceKeeps=The other instance keeps running and holds %Url% - startup aborted.
+log.manualSearch=  Search manually: Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match 'Moverequest-Dashboard' } | Select-Object ProcessId, CommandLine
+log.startOtherPort=  Or start differently: .\Exchange-MoveRequest-Dashboard.ps1 -Port 9090
+log.expectedError32=Startup will probably fail with error 32 - see troubleshooting in the wiki.
+log.context=Execution context: %Name%, administrator: %Admin%, PowerShell %Version% (%Bitness%)
+log.updateDisabled=Update check disabled (-KeinUpdateCheck).
+log.updateStarted=Update check against GitLab releases started (project ID %Id%, asynchronous).
+log.updateStartFailed=Update check could not be started: %Error%
+log.snapinLoading=Loading Exchange PowerShell snap-in (2019/SE)...
+log.snapinLoaded=Exchange PowerShell snap-in loaded successfully.
+log.snapinAlreadyLoaded=Exchange PowerShell snap-in is already loaded.
+log.firstCollection=First data collection is running ...
+log.firstCollectionDone=First collection (base data): %Count% move request(s), %Details% detail row(s), %Seconds% s
+log.detailsLater=Detail data (percent, sizes, times) for %Count% job(s) will be fetched in the next run.
+log.prefixHeld=The prefix '%Url%' is still held by another instance.
+log.serverStartFailed=Error starting the HTTP server: %Error%
+log.prefixBusy=The URL prefix '%Url%' was taken between check and start - retrying (%Attempt% of %Max%) after releasing it again.
+log.serverStarted=HTTP server started at: %Url%
+log.openBrowser=Open the dashboard in the browser: %Url%
+log.stopHint=To stop: Ctrl+C or click 'Stop server' in the dashboard.
+log.causePrefix=CAUSE: the URL prefix '%Url%' was already taken - almost always by a second dashboard. The old version 'live_moverequest_statistik.ps1' reserves the same port as well.
+log.diagnose=  %Text%
+log.help1=REMEDY 1: stop the other instance (close the window or terminate the PID).
+log.help2=REMEDY 2: start differently: .\Exchange-MoveRequest-Dashboard.ps1 -Port 9090
+log.help3=REMEDY 3: for inspection IN THE ERROR CASE: netstat -ano | findstr :%Port%  and  netsh http show urlacl | findstr :%Port%
+log.tip=TIP: run the script as administrator or free the port:
+log.browserOpened=Browser opened.
+log.browserFailed=Browser could not be opened automatically.
+log.serverStopRequested=Server stop requested.
+log.connectionClosed=Connection closed by the browser - request aborted (normal when stopping or closing the tab).
+log.listenerError=HTTP listener error: %Error%
+log.requestError=Error while processing the request: %Error%
+log.critical=CRITICAL ERROR: %Error%
+log.stack=Stack trace: %Trace%
+log.serverStopped=HTTP server shut down cleanly.
+log.stopFailed=Error stopping the HTTP server: %Error%
+log.jobsStopped=Open move jobs stopped.
+log.jobsStopFailed=Error stopping the move jobs: %Error%
+log.runtime=Runtime: %Minutes% min | %Collections% collection(s), %Queries% statistics fetch(es), %CacheHits% cache hit(s)
+log.endBanner=== Live dashboard stopped ===
+log.moveJob=Move job
+log.actionWordCreated=created
+log.actionWordResumed=resumed
+log.actionWordRemoved=removed
+log.modeSuspend=run to 95 % and suspend
+log.modeDirect=migrate straight through
+log.pretestCheckMove=check first, then move
+log.pretestOnly=check only (move nothing)
+log.pretestNone=no pretest
+log.badItems=Bad items: %Value%
+log.startWhatIfOnly=%Count% mailbox/mailboxes will only be checked with -WhatIf - nothing will be moved (Batch: %Batch%).
+log.startCheckThen=%Count% mailbox/mailboxes will first be checked with -WhatIf and then moved to '%Target%' (priority: %Priority%, %BadItems%, Batch: %Batch%).
+log.startDirect=%Count% mailbox/mailboxes will be moved to '%Target%' (priority: %Priority%, %BadItems%, Batch: %Batch%).
+log.runningInstanceOnly=  Running instance: %Instance%
+log.scriptFailed=Script terminated with errors. See log: %Path%
+log.netshAcl=  netsh http add urlacl url=%Url% user=%User%
 '@
 }
 
@@ -978,6 +1195,23 @@ function T {
     }
 
     return $Text
+}
+
+function TM {
+    <#
+    .SYNOPSIS
+        Kurzform fuer eine lokalisierte Meldung: TM 'log.key' @{ Wert = ... }
+    .DESCRIPTION
+        Genau wie T, nur mit sprechenderem Namen an den Aufrufstellen von
+        Konsole, Logdatei und API-Meldungen. Fehlt ein Schluessel, liefert T
+        den deutschen Text - die Anzeige bleibt damit immer lesbar.
+    #>
+    param(
+        [Parameter(Mandatory = $true, Position = 0)][string]$Key,
+        [Parameter(Mandatory = $false, Position = 1)][hashtable]$Werte
+    )
+
+    return (T -Key $Key -Werte $Werte)
 }
 
 function Resolve-SprachPlatzhalter {
@@ -1194,7 +1428,7 @@ function Rotiere-Log {
     $script:LogBytes = 0
 
     Open-Log
-    Write-LogZeile -Zeile "=== Log rotiert: vorige Datei liegt als $(Split-Path -Leaf "$LogDateiPfad.1") vor ==="
+    Write-LogZeile -Zeile (TM 'log.rotated' @{ File = (Split-Path -Leaf "$LogDateiPfad.1") })
 }
 
 function Close-Log {
@@ -1285,20 +1519,30 @@ function Write-Log {
         }
     }
 
-    $LogZeile = "[$( $Jetzt.ToString('yyyy-MM-dd HH:mm:ss') )] [$Typ] $Nachricht"
+    # Stufe und Meldung erscheinen in der gewaehlten Sprache (v2.16). Der
+    # interne Typ bleibt INFO/WARNUNG/FEHLER/STILL - nur die Anzeige wechselt.
+    $StufenSchluessel = switch ($Typ) {
+        "WARNUNG" { "warn" }
+        "FEHLER"  { "error" }
+        "STILL"   { "silent" }
+        default   { "info" }
+    }
+    $Stufe = TM "log.level.$StufenSchluessel"
+
+    $LogZeile = "[$( $Jetzt.ToString('yyyy-MM-dd HH:mm:ss') )] [$Stufe] $Nachricht"
     Write-LogZeile -Zeile $LogZeile
 
     if ($Ausgefallen -gt 0) {
-        Write-LogZeile -Zeile "    ==> $($Ausgefallen)x in den letzten $([int]$script:LogIntervallSek)s aufgetreten, nicht einzeln protokolliert"
+        Write-LogZeile -Zeile (TM 'log.suppressed' @{
+            Count   = $Ausgefallen
+            Seconds = [int]$script:LogIntervallSek
+        })
     }
 
     if ($Typ -eq "STILL") { return }
 
-    switch ($Typ) {
-        "INFO"     { Write-Host $LogZeile -ForegroundColor Cyan }
-        "WARNUNG"  { Write-Host $LogZeile -ForegroundColor Yellow }
-        "FEHLER"   { Write-Host $LogZeile -ForegroundColor Red }
-    }
+    $Farben = @{ INFO='Cyan'; WARNUNG='Yellow'; FEHLER='Red' }
+    Write-Host $LogZeile -ForegroundColor $Farben[$Typ]
 }
 
 # ============================================================================
@@ -1900,10 +2144,10 @@ function Stop-AnderesDashboard {
 
         $Antwort = $Anfrage.GetResponse()
         $Antwort.Close()
-        Write-Log -Nachricht "  /api/stop an die andere Instanz gesendet." -Typ "INFO"
+        Write-Log -Nachricht (TM 'log.stopSent') -Typ "INFO"
     }
     catch {
-        Write-Log -Nachricht "  /api/stop nicht moeglich: $($_.Exception.Message)" -Typ "INFO"
+        Write-Log -Nachricht (TM 'log.stopFailed' @{ Error = $_.Exception.Message }) -Typ "INFO"
     }
 
     for ($Versuch = 0; $Versuch -lt ($WartezeitSekunden * 2); $Versuch++) {
@@ -1961,7 +2205,7 @@ function Resolve-DashboardPortKonflikt {
     $PortZustand = Test-DashboardAntwort -Url $BasisUrl
 
     if ($PortZustand -eq "Fremd") {
-        Write-Log -Nachricht "${Phase}: Auf Port $Port antwortet ein fremder Dienst - der Start wird voraussichtlich fehlschlagen." -Typ "WARNUNG"
+        Write-Log -Nachricht (TM 'log.foreignService' @{ Phase = $Phase; Port = $Port }) -Typ "WARNUNG"
         return "Fremd"
     }
 
@@ -1973,11 +2217,15 @@ function Resolve-DashboardPortKonflikt {
             $WeitereInstanzen = @(Get-LaufendeDashboardInstanzen)
             if ($WeitereInstanzen.Count -gt 0) {
                 $Anzahl  = $WeitereInstanzen.Count
-                $Meldung = "Es laeuft bereits eine weitere Dashboard-Instanz:"
-                if ($Anzahl -gt 1) { $Meldung = "Es laeuft bereits $Anzahl weitere Dashboard-Instanzen:" }
-                Write-Log -Nachricht "HINWEIS: $Meldung" -Typ "WARNUNG"
+                if ($Anzahl -gt 1) {
+                    $Meldung = TM 'log.otherInstanceMany' @{ Count = $Anzahl }
+                }
+                else {
+                    $Meldung = TM 'log.otherInstanceOne'
+                }
+                Write-Log -Nachricht (TM 'log.hint' @{ Message = $Meldung }) -Typ "WARNUNG"
                 foreach ($Instanz in $WeitereInstanzen) {
-                    Write-Log -Nachricht "  $Instanz" -Typ "INFO"
+                    Write-Log -Nachricht ([string]$Instanz) -Typ "INFO"
                 }
             }
         }
@@ -1988,22 +2236,22 @@ function Resolve-DashboardPortKonflikt {
     $AndereInstanzen = @(Get-DashboardProzess -Port $Port)
 
     if ($KeinAutoStopp) {
-        Write-Log -Nachricht "${Phase}: Auf Port $Port laeuft bereits ein Dashboard - wird NICHT gestoppt (-KeinAutoStopp)." -Typ "WARNUNG"
+        Write-Log -Nachricht (TM 'log.alreadyRunningNoStop' @{ Phase = $Phase; Port = $Port }) -Typ "WARNUNG"
         foreach ($Prozess in $AndereInstanzen) {
-            Write-Log -Nachricht "  PID $($Prozess.Pid) ($($Prozess.Prozess)): $($Prozess.CommandLine)" -Typ "INFO"
+            Write-Log -Nachricht (TM 'log.processLine' @{ Pid = $Prozess.Pid; Process = $Prozess.Prozess; CommandLine = $Prozess.CommandLine }) -Typ "INFO"
         }
         if ($AndereInstanzen.Count -eq 0) {
-            Write-Log -Nachricht "  (kein Prozess mit Skriptnamen gefunden - vermutlich in einer offenen Konsole gestartet)" -Typ "INFO"
+            Write-Log -Nachricht (TM 'log.noProcessConsole') -Typ "INFO"
         }
         return "OhneStopp"
     }
 
-    Write-Log -Nachricht "${Phase}: Auf Port $Port laeuft bereits ein Dashboard - die alte Instanz wird jetzt beendet." -Typ "WARNUNG"
+    Write-Log -Nachricht (TM 'log.alreadyRunningStop' @{ Phase = $Phase; Port = $Port }) -Typ "WARNUNG"
     foreach ($Prozess in $AndereInstanzen) {
-        Write-Log -Nachricht "  Laufende Instanz: PID $($Prozess.Pid) ($($Prozess.Prozess)), Port $($Prozess.Port): $($Prozess.CommandLine)" -Typ "INFO"
+        Write-Log -Nachricht (TM 'log.runningInstance' @{ Pid = $Prozess.Pid; Process = $Prozess.Prozess; Port = $Prozess.Port; CommandLine = $Prozess.CommandLine }) -Typ "INFO"
     }
     if ($AndereInstanzen.Count -eq 0) {
-        Write-Log -Nachricht "  (kein Prozess mit Skriptnamen gefunden - Konsole? Der Stopp laeuft trotzdem ueber /api/stop)" -Typ "INFO"
+        Write-Log -Nachricht (TM 'log.noProcessStop') -Typ "INFO"
     }
 
     $PraefixFrei = Stop-AnderesDashboard -BasisUrl $BasisUrl
@@ -2014,16 +2262,16 @@ function Resolve-DashboardPortKonflikt {
         # UND genau diesem Port.
         $AndereHart = @(Get-DashboardProzess -Port $Port)
         foreach ($Prozess in $AndereHart) {
-            Write-Log -Nachricht "  Sauberer Stopp reichte nicht - beende hart: PID $($Prozess.Pid) ($($Prozess.Prozess))" -Typ "WARNUNG"
+            Write-Log -Nachricht (TM 'log.forceKill' @{ Pid = $Prozess.Pid; Process = $Prozess.Prozess }) -Typ "WARNUNG"
             try { Stop-Process -Id $Prozess.Pid -Force -ErrorAction Stop }
-            catch { Write-Log -Nachricht "  PID $($Prozess.Pid) konnte nicht beendet werden: $($_.Exception.Message)" -Typ "WARNUNG" }
+            catch { Write-Log -Nachricht (TM 'log.killFailed' @{ Pid = $Prozess.Pid; Error = $_.Exception.Message }) -Typ "WARNUNG" }
         }
         if ($AndereHart.Count -gt 0) { Start-Sleep -Seconds 2 }
         $PraefixFrei = ((Test-DashboardAntwort -Url $BasisUrl) -ne "Dashboard")
     }
 
     if ($PraefixFrei) {
-        Write-Log -Nachricht "${Phase}: Alte Instanz beendet - $BasisUrl ist frei, der Start kann weitergehen." -Typ "INFO"
+        Write-Log -Nachricht (TM 'log.oldStopped' @{ Phase = $Phase; Url = $BasisUrl }) -Typ "INFO"
         return "Frei"
     }
 
@@ -2660,13 +2908,13 @@ function Start-Verschiebeauftrag {
     $Benutzer = @($Benutzer | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
 
     if ($Benutzer.Count -eq 0) {
-        return @{ Fehler = "Keine Postfaecher ausgewaehlt." }
+        return @{ Fehler = (TM 'msg.noMailboxesSelected') }
     }
     if ([string]::IsNullOrWhiteSpace($Ziel)) {
-        return @{ Fehler = "Keine Ziel-Datenbank angegeben." }
+        return @{ Fehler = (TM 'msg.noTargetDb') }
     }
     if (-not [string]::IsNullOrWhiteSpace($Quelle) -and $Quelle -eq $Ziel) {
-        return @{ Fehler = "Quell- und Ziel-Datenbank sind identisch." }
+        return @{ Fehler = (TM 'msg.sourceTargetSame') }
     }
 
     # --- Ziel-Datenbank pruefen: existent und gemountet ---------------------
@@ -2680,20 +2928,20 @@ function Start-Verschiebeauftrag {
         $ZielDb = Get-MailboxDatabase -Identity $Ziel -Status -ErrorAction Stop
     }
     catch {
-        return @{ Fehler = "Ziel-Datenbank '$Ziel' wurde nicht gefunden: $($_.Exception.Message)" }
+        return @{ Fehler = (TM 'msg.targetNotFound' @{ Target = $Ziel; Error = $_.Exception.Message }) }
     }
 
     $IstGemountet = $true
     try { $IstGemountet = [bool]$ZielDb.Mounted } catch { }
     if (-not $IstGemountet) {
-        return @{ Fehler = "Die Ziel-Datenbank '$Ziel' ist nicht bereitgestellt (nicht gemountet). Dorthin koennen keine MoveRequests erstellt werden." }
+        return @{ Fehler = (TM 'msg.targetNotMounted' @{ Target = $Ziel }) }
     }
 
     # Prioritaet pruefen (Werte von -Priority bei New-MoveRequest)
     if ([string]::IsNullOrWhiteSpace($Prioritaet)) { $Prioritaet = "Normal" }
     $ZulaessigePrioritaeten = @('Low', 'Normal', 'High', 'Critical', 'Emergency')
     if ($ZulaessigePrioritaeten -notcontains $Prioritaet) {
-        return @{ Fehler = "Unzulaessige Prioritaet '$Prioritaet'. Erlaubt: $($ZulaessigePrioritaeten -join ', ')." }
+        return @{ Fehler = (TM 'msg.invalidPriority' @{ Priority = $Prioritaet; Allowed = ($ZulaessigePrioritaeten -join ', ') }) }
     }
     # Schreibweise normieren, damit Log und Job immer gleiche Gross-/Klein-
     # schreibung sehen (der Vergleich oben ist ohnehin nicht schriftsprachlich).
@@ -2703,14 +2951,14 @@ function Start-Verschiebeauftrag {
     if ([string]::IsNullOrWhiteSpace($Vorabtest)) { $Vorabtest = "aus" }
     $ZulaessigeVorabtests = @('aus', 'pruefen', 'nur')
     if ($ZulaessigeVorabtests -notcontains $Vorabtest) {
-        return @{ Fehler = "Unzulaessiger Vorabtest '$Vorabtest'. Erlaubt: aus, pruefen, nur." }
+        return @{ Fehler = (TM 'msg.invalidPretest' @{ Pretest = $Vorabtest }) }
     }
     $Vorabtest = @($ZulaessigeVorabtests | Where-Object { $_ -eq $Vorabtest })[0]
 
     # BadItemLimit: nur die in der Oberflaeche angebotenen Werte zulassen
     $ZulaessigeBadItems = @(0, 1, 10, 20, 50, 100)
     if ($ZulaessigeBadItems -notcontains $BadItemLimit) {
-        return @{ Fehler = "Unzulaessiger BadItemLimit '$BadItemLimit'. Erlaubt: $($ZulaessigeBadItems -join ', ')." }
+        return @{ Fehler = (TM 'msg.invalidBadItems' @{ Value = $BadItemLimit; Allowed = ($ZulaessigeBadItems -join ', ') }) }
     }
 
     if (-not [string]::IsNullOrWhiteSpace($Quelle)) {
@@ -2718,7 +2966,7 @@ function Start-Verschiebeauftrag {
             Get-MailboxDatabase -Identity $Quelle -ErrorAction Stop | Out-Null
         }
         catch {
-            return @{ Fehler = "Quell-Datenbank '$Quelle' wurde nicht gefunden: $($_.Exception.Message)" }
+            return @{ Fehler = (TM 'msg.sourceNotFound' @{ Source = $Quelle; Error = $_.Exception.Message }) }
         }
     }
 
@@ -2742,7 +2990,7 @@ function Start-Verschiebeauftrag {
         }
     }
     if ($MitSuspend -and -not $script:SuspendParameterPrueft) {
-        return @{ Fehler = "Der Parameter -SuspendWhenReadyToComplete steht auf diesem Server nicht zur Verfuegung. Es kann nicht suspendiert werden." }
+        return @{ Fehler = (TM 'msg.suspendUnavailable') }
     }
 
     if ([string]::IsNullOrWhiteSpace($BatchName)) {
@@ -2892,14 +3140,14 @@ function Start-Verschiebeauftrag {
 
                     if ($Vorabtest -eq 'nur') {
                         $Ok            = $true
-                        $Meldung       = "WhatIf-Pruefung bestanden - das Postfach ist verschiebbar, es wurde nichts erstellt."
+                        $Meldung       = (TM 'msg.whatIfPassed')
                         $Weitermachen  = $false
                     }
                 }
                 catch {
                     # Technik/Kontext/Store-Hinweis baut die Funktion - mit
                     # demselben Text wie im echten Lauf, nur mit Prefix.
-                    $Meldung      = "WhatIf-Pruefung fehlgeschlagen: " + (Baue-FehlerText -Fehler $_ -ZielDb $ZielDatenbank)
+                    $Meldung      = (TM 'msg.whatIfFailed' @{ Error = (Baue-FehlerText -Fehler $_ -ZielDb $ZielDatenbank) })
                     $Weitermachen = $false
                 }
             }
@@ -2910,17 +3158,17 @@ function Start-Verschiebeauftrag {
 
                     $Ok = $true
                     if ($Vorabtest -eq 'pruefen') {
-                        $Meldung = "WhatIf-Pruefung bestanden, "
+                        $Meldung = (TM 'msg.whatIfPassed') + ", "
                     }
                     else {
                         $Meldung = ""
                     }
 
                     if ($MitSuspend) {
-                        $Meldung += "MoveRequest erstellt - haelt vor dem Abschluss an (95 %), Prioritaet: $Prioritaet."
+                        $Meldung += (TM 'msg.moveCreatedSuspend' @{ Priority = $Prioritaet })
                     }
                     else {
-                        $Meldung += "MoveRequest erstellt - wird durchgehend migriert, Prioritaet: $Prioritaet."
+                        $Meldung += (TM 'msg.moveCreatedDirect' @{ Priority = $Prioritaet })
                     }
                 }
                 catch {
@@ -2939,7 +3187,7 @@ function Start-Verschiebeauftrag {
                          -ArgumentList $Ziel, $Benutzer, $MitSuspend, $BatchName, $Prioritaet, $Vorabtest, $BadItemLimit
     }
     catch {
-        return @{ Fehler = "Der Hintergrund-Job konnte nicht gestartet werden: $($_.Exception.Message)" }
+        return @{ Fehler = (TM 'msg.jobStartFailed' @{ Error = $_.Exception.Message }) }
     }
 
     $script:VersandAuftragNr++
@@ -2961,7 +3209,7 @@ function Start-Verschiebeauftrag {
         Prioritaet    = $Prioritaet
         Vorabtest     = $Vorabtest
         BadItemLimit  = $BadItemLimit
-        Status        = "Laufend"
+        Status        = "Running"
         Meldung       = ""
         Ergebnis      = @()
         Abgeschlossen = $false
@@ -2973,7 +3221,17 @@ function Start-Verschiebeauftrag {
         'nur'     { "nur -WhatIf-Pruefung, nichts erstellen" }
         default   { "kein Vorabtest" }
     }
-    Write-Log -Nachricht "Verschiebeauftrag #$AuftragId gestartet: $($Benutzer.Count) Postfach/Postfaecher, '$Quelle' -> '$Ziel', Prioritaet: $Prioritaet, BadItemLimit: $BadItemLimit, Vorabtest: $VorabtestText, Modus: $ModusText, Batch: $BatchName" -Typ "INFO"
+    Write-Log -Nachricht (TM 'log.moveJobStarted' @{
+        Id         = $AuftragId
+        Count      = $Benutzer.Count
+        Source     = $Quelle
+        Target     = $Ziel
+        Priority   = $Prioritaet
+        BadItemLimit = $BadItemLimit
+        Pretest    = $VorabtestText
+        Mode       = $ModusText
+        Batch      = $BatchName
+    }) -Typ "INFO"
 
     $BadItemsText = "BadItems: $BadItemLimit"
     if ($Vorabtest -eq 'nur') {
@@ -3033,7 +3291,7 @@ function Get-VersandStatus {
             if ($Auftrag.JobId) { $Job = Get-Job -Id $Auftrag.JobId -ErrorAction SilentlyContinue }
 
             if ($null -eq $Job) {
-                $Auftrag.Status        = "Fehlgeschlagen"
+                $Auftrag.Status        = "Failed"
                 $Auftrag.Meldung       = "Der Hintergrund-Job ist nicht mehr vorhanden (Skript evtl. neu gestartet)."
                 $Auftrag.Abgeschlossen = $true
                 $Auftrag.EndeZeit      = $Jetzt
@@ -3068,7 +3326,7 @@ function Get-VersandStatus {
                 $Auftrag.FehlerAnzahl  = @($Auftrag.Ergebnis | Where-Object { -not $_.Ok }).Count
                 $Auftrag.EndeZeit      = $Jetzt
                 $Auftrag.Abgeschlossen = $true
-                $Auftrag.Status        = if ([string]$Job.State -eq 'Completed') { "Abgeschlossen" } else { "Fehlgeschlagen" }
+                Status        = if ([string]$Job.State -eq 'Completed') { "Completed" } else { "Failed" }
 
                 $JobFehler = @()
                 foreach ($FehlerText in $FehlerStream) { $JobFehler += [string]$FehlerText }
@@ -3106,26 +3364,34 @@ function Get-VersandStatus {
                     }
                 }
 
-                $AktionsWort = 'erstellt'
-                if ($ArtText -eq 'Resume')    { $AktionsWort = 'fortgesetzt' }
-                if ($ArtText -eq 'Entfernen') { $AktionsWort = 'entfernt' }
+                $AktionsWort = TM 'log.actionWordCreated'
+                if ($ArtText -eq 'Resume')    { $AktionsWort = TM 'log.actionWordResumed' }
+                if ($ArtText -eq 'Entfernen') { $AktionsWort = TM 'log.actionWordRemoved' }
 
-                if ($Auftrag.Status -eq "Abgeschlossen" -and $Auftrag.FehlerAnzahl -eq 0) {
+                if ($Auftrag.Status -eq "Completed" -and $Auftrag.FehlerAnzahl -eq 0) {
                     if ($ArtText -eq 'Resume') {
-                        Write-Log -Nachricht "$ArtLabel #$($Auftrag.Id) abgeschlossen: $($Auftrag.Erstellt) suspendierte Anforderung/Anforderungen fortgesetzt." -Typ "INFO"
+                        Write-Log -Nachricht (TM 'log.actionJobResumed' @{ Label = $ArtLabel; Id = $Auftrag.Id; Done = $Auftrag.Erstellt }) -Typ "INFO"
                     }
                     elseif ($ArtText -eq 'Entfernen') {
-                        Write-Log -Nachricht "$ArtLabel #$($Auftrag.Id) abgeschlossen: $($Auftrag.Erstellt) abgeschlossene Anforderung/Anforderungen entfernt." -Typ "INFO"
+                        Write-Log -Nachricht (TM 'log.actionJobRemoved' @{ Label = $ArtLabel; Id = $Auftrag.Id; Done = $Auftrag.Erstellt }) -Typ "INFO"
                     }
                     elseif ([string]$Auftrag.Vorabtest -eq 'nur') {
-                        Write-Log -Nachricht "Verschiebeauftrag #$($Auftrag.Id) abgeschlossen: WhatIf-Pruefung, $($Auftrag.Erstellt) von $($Auftrag.Gesamt) bestanden." -Typ "INFO"
+                        Write-Log -Nachricht (TM 'log.actionJobChecked' @{ Label = $ArtLabel; Id = $Auftrag.Id; Done = $Auftrag.Erstellt; Total = $Auftrag.Gesamt }) -Typ "INFO"
                     }
                     else {
-                        Write-Log -Nachricht "Verschiebeauftrag #$($Auftrag.Id) abgeschlossen: $($Auftrag.Erstellt) MoveRequest(s) erstellt." -Typ "INFO"
+                        Write-Log -Nachricht (TM 'log.actionJobCreated' @{ Label = $ArtLabel; Id = $Auftrag.Id; Done = $Auftrag.Erstellt }) -Typ "INFO"
                     }
                 }
                 else {
-                    Write-Log -Nachricht "$ArtLabel #$($Auftrag.Id) $($Auftrag.Status): $($Auftrag.Erstellt) $AktionsWort, $($Auftrag.FehlerAnzahl) Fehler. $($Auftrag.Meldung)" -Typ "WARNUNG"
+                    Write-Log -Nachricht (TM 'log.actionJobFailed' @{
+                        Label   = $ArtLabel
+                        Id      = $Auftrag.Id
+                        Status  = $Auftrag.Status
+                        Done    = $Auftrag.Erstellt
+                        Action  = $AktionsWort
+                        Errors  = $Auftrag.FehlerAnzahl
+                        Message = $Auftrag.Meldung
+                    }) -Typ "WARNUNG"
                 }
             }
         }
@@ -3223,7 +3489,7 @@ function Start-MoveAktion {
     $Einzelziel = $ZielIds.Count -gt 0
 
     if (-not $Alle -and -not $Einzelziel -and [string]::IsNullOrWhiteSpace($BatchName)) {
-        return @{ Fehler = "Es wurde weder eine Anforderung noch ein Batch noch 'alle' angegeben." }
+        return @{ Fehler = (TM 'msg.actionNoTarget') }
     }
 
     # Der Zielbefehl muss existieren, sonst liefert der Job nur Fehlerzeilen.
@@ -3233,7 +3499,7 @@ function Start-MoveAktion {
         Get-Command $BefehlsName -ErrorAction Stop | Out-Null
     }
     catch {
-        return @{ Fehler = "$BefehlsName ist auf diesem Server nicht verfuegbar: $($_.Exception.Message)" }
+        return @{ Fehler = (TM 'msg.commandUnavailable' @{ Command = $BefehlsName; Error = $_.Exception.Message }) }
     }
 
     # --- passende Anforderungen suchen -------------------------------------
@@ -3257,7 +3523,11 @@ function Start-MoveAktion {
 
             if ($OhneTreffer.Count -gt 0) {
                 $Nennung = ($OhneTreffer | Select-Object -First 5) -join "', '"
-                Write-Log -Nachricht "MoveRequest-Aktion: $($OhneTreffer.Count) von $($ZielIds.Count) ausgewählten Anforderungen nicht gefunden: '$Nennung'." -Typ "WARNUNG"
+                Write-Log -Nachricht (TM 'log.missingRequests' @{
+                    Missing   = $OhneTreffer.Count
+                    Selected  = $ZielIds.Count
+                    List      = $Nennung
+                }) -Typ "WARNUNG"
             }
 
             $AlleAnforderungen = $Gefunden
@@ -3270,7 +3540,7 @@ function Start-MoveAktion {
         }
     }
     catch {
-        return @{ Fehler = "Die MoveRequests konnten nicht abgefragt werden: $($_.Exception.Message)" }
+        return @{ Fehler = (TM 'msg.moveQueryFailed' @{ Error = $_.Exception.Message }) }
     }
 
     # Suspendiert: 'Suspended' (SuspendWhenReadyToComplete) und
@@ -3281,18 +3551,18 @@ function Start-MoveAktion {
     })
 
     if ($Passende.Count -eq 0) {
-        $Wort = 'abgeschlossene'
-        if ($Aktion -eq 'Resume') { $Wort = 'suspendierte' }
+        $Wort = 'completed'
+        if ($Aktion -eq 'Resume') { $Wort = 'suspended' }
         if ($Einzelziel) {
             if ($ZielIds.Count -eq 1) {
-                return @{ Fehler = "Die Anforderung '$($ZielIds[0])' ist keine $Wort Anforderung (mehr)." }
+                return @{ Fehler = (TM 'msg.requestNotFoundSingle' @{ Identity = $ZielIds[0]; Word = $Wort }) }
             }
-            return @{ Fehler = "Keine der $($ZielIds.Count) ausgewählten Anforderungen ist (mehr) eine $Wort Anforderung." }
+            return @{ Fehler = (TM 'msg.noneOfSelected' @{ Count = $ZielIds.Count; Word = $Wort }) }
         }
         if ($Alle) {
-            return @{ Fehler = "Keine $Wort MoveRequests gefunden." }
+            return @{ Fehler = (TM 'msg.noMatchingMoveRequests' @{ Word = $Wort }) }
         }
-        return @{ Fehler = "Im Batch '$BatchName' ist keine $Wort Anforderung vorhanden." }
+        return @{ Fehler = (TM 'msg.noneInBatch' @{ Batch = $BatchName; Word = $Wort }) }
     }
 
     $Eintraege = @(foreach ($Anforderung in $Passende) {
@@ -3422,7 +3692,7 @@ function Start-MoveAktion {
                          -ArgumentList $Eintraege, $Aktion
     }
     catch {
-        return @{ Fehler = "Der Hintergrund-Job konnte nicht gestartet werden: $($_.Exception.Message)" }
+        return @{ Fehler = (TM 'msg.jobStartFailed' @{ Error = $_.Exception.Message }) }
     }
 
     $script:VersandAuftragNr++
@@ -3471,7 +3741,7 @@ function Start-MoveAktion {
         Prioritaet    = ""
         Vorabtest     = ""
         BadItemLimit  = 0
-        Status        = "Laufend"
+        Status        = "Running"
         Meldung       = ""
         Ergebnis      = @()
         Abgeschlossen = $false
@@ -3480,7 +3750,12 @@ function Start-MoveAktion {
     $AnzahlText = "$Gesamt Anforderung"
     if ($Gesamt -ne 1) { $AnzahlText = "$Gesamt Anforderungen" }
 
-    Write-Log -Nachricht "MoveRequest-Aktion #$AuftragId gestartet: $Aktion, $AnzahlText, Auswahl: $AuswahlText" -Typ "INFO"
+    Write-Log -Nachricht (TM 'log.actionStarted' @{
+        Id       = $AuftragId
+        Action   = $Aktion
+        Count    = $AnzahlText
+        Selection = $AuswahlText
+    }) -Typ "INFO"
 
     if ($Aktion -eq 'Resume') {
         $StartMeldung = "Fortsetzung: $AnzahlText ($AuswahlText) - Resume-MoveRequest laeuft im Hintergrund, die Postfaecher ziehen bis zum Abschluss durch."
@@ -3604,7 +3879,7 @@ function Invoke-StatistikAbrufe {
         if ($null -eq $script:StatistikPool) {
             $script:StatistikPool = [runspacefactory]::CreateRunspacePool(1, $Parallelitaet)
             $script:StatistikPool.Open()
-            Write-Log -Nachricht "Statistik-Pool mit bis zu $Parallelitaet parallelen Abrufen geoeffnet." -Typ "INFO"
+            Write-Log -Nachricht (TM 'log.statsPoolOpen' @{ Count = $Parallelitaet }) -Typ "INFO"
         }
 
         # Alle Abrufe starten - sie laufen im Pool parallel.
@@ -3655,7 +3930,7 @@ function Invoke-StatistikAbrufe {
         }
     }
     catch {
-        Write-Log -Nachricht "Statistik-Pool nicht nutzbar: $($_.Exception.Message)" -Typ "WARNUNG"
+        Write-Log -Nachricht (TM 'log.statsPoolFailed' @{ Error = $_.Exception.Message }) -Typ "WARNUNG"
     }
 
     # --- Sicherheitsnetz: liefert der Pool gar kein Ergebnis, lag es fast
@@ -3672,7 +3947,7 @@ function Invoke-StatistikAbrufe {
             try { $script:StatistikPool.Close() ; $script:StatistikPool.Dispose() } catch { }
             $script:StatistikPool = $null
         }
-        Write-Log -Nachricht "Paralleler Statistikabruf lieferte kein einziges Ergebnis - schalte ab und wiederhole sequenziell." -Typ "WARNUNG"
+        Write-Log -Nachricht (TM 'log.statsParallelEmpty') -Typ "WARNUNG"
         Invoke-StatistikSequenziell -Auftraege $Auftraege -Ergebnisse $Ergebnisse
     }
 
@@ -3812,7 +4087,11 @@ function Get-MoveRequestDaten {
                     continue
                 }
                 else {
-                    Write-Log -Nachricht "Cache-Kollision fuer Schluessel '$Schluessel' erkannt (Cache: '$($Gecacht.DisplayName)', aktuell: '$AktuellerName') - frage neu ab." -Typ "WARNUNG"
+                    Write-Log -Nachricht (TM 'log.cacheCollision' @{
+                        Key     = $Schluessel
+                        Cached  = $Gecacht.DisplayName
+                        Current = $AktuellerName
+                    }) -Typ "WARNUNG"
                     $script:StatistikCache.Remove($Schluessel)
                 }
             }
@@ -3893,7 +4172,10 @@ function Get-MoveRequestDaten {
 
                 # Erste drei Fehler ausgeben, danach nur noch zusammenfassen
                 if ($FehlerListe.Count -le 3) {
-                    Write-Log -Nachricht "  Statistik-Abruf fehlgeschlagen fuer '$($MoveRequest.DisplayName)': $Ursache" -Typ "WARNUNG"
+                    Write-Log -Nachricht (TM 'log.statsFetchFailed' @{
+                        Name  = $MoveRequest.DisplayName
+                        Error = $Ursache
+                    }) -Typ "WARNUNG"
                 }
 
                 # Die Zeile trotzdem ausgeben. Sonst verschwindet der Job
@@ -3998,13 +4280,16 @@ function Get-MoveRequestDaten {
         Write-Log -Nachricht $Meldung -Typ "STILL"
 
         if ($script:LetzteAktiv -eq 0 -and $AnzahlGesamt -gt 0) {
-            Write-Log -Nachricht "Alle $AnzahlGesamt MoveRequests sind in einem Endzustand. Es wird nur noch alle $LeerlaufIntervall s geprueft." -Typ "STILL"
+            Write-Log -Nachricht (TM 'log.allFinished' @{
+                Count   = $AnzahlGesamt
+                Seconds = $LeerlaufIntervall
+            }) -Typ "STILL"
         }
     }
     catch {
         $FehlerNachricht = $_.Exception.Message
-        $Ergebnis.Fehler  = "Fehler beim Abrufen der MoveRequests: $FehlerNachricht"
-        Write-Log -Nachricht "API: $($Ergebnis.Fehler)" -Typ "FEHLER"
+        $Ergebnis.Fehler  = (TM 'msg.moveQueryFailed' @{ Error = $FehlerNachricht })
+        Write-Log -Nachricht (TM 'log.apiError' @{ Error = $Ergebnis.Fehler }) -Typ "FEHLER"
     }
     finally {
         $StoppUhr.Stop()
@@ -4022,14 +4307,17 @@ function Get-MoveRequestDaten {
         }
 
         if ($FehlerListe.Count -gt 3) {
-            Write-Log -Nachricht "API: $($FehlerListe.Count) MoveRequest(s) ohne Statistik (nur die ersten 3 einzeln protokolliert)." -Typ "WARNUNG"
+            Write-Log -Nachricht (TM 'log.apiMissingStats' @{ Count = $FehlerListe.Count }) -Typ "WARNUNG"
         }
         foreach ($Ursache in $FehlerUrsachen.Keys) {
-            Write-Log -Nachricht "  Ursache ($($FehlerUrsachen[$Ursache])x): $Ursache" -Typ "WARNUNG"
+            Write-Log -Nachricht (TM 'log.apiCause' @{
+                Count = $FehlerUrsachen[$Ursache]
+                Cause = $Ursache
+            }) -Typ "WARNUNG"
         }
         if ($EnvelopeFehler) {
-            Write-Log -Nachricht "HINWEIS: Envelope-Groesse ist der Engpass. In einer Exchange Management Shell ausfuehren und Skript neu starten:" -Typ "WARNUNG"
-            Write-Log -Nachricht "  Set-PowerShellConfig -Identity WSMan:localhost -MaxEnvelopeSizeKb 16384" -Typ "WARNUNG"
+            Write-Log -Nachricht (TM 'log.envelopeHint') -Typ "WARNUNG"
+            Write-Log -Nachricht (TM 'log.envelopeCmd') -Typ "WARNUNG"
         }
 
         # Groesster Posten: die deserialisierten Objekte explizit freigeben.
@@ -5836,7 +6124,7 @@ $LightCSS
                     return;
                 }
 
-                zeigeVersandMelding(
+                zeigeVersandMeldung(
                     '<strong>' + TXT('jobStartedStrong').replace('%Id%', escapeHtml(daten.AuftragId)) + '</strong><br>' +
                     escapeHtml(daten.Meldung), false);
                 statusAbfragenStarten();
@@ -6117,7 +6405,7 @@ $LightCSS
                 statusFehler = 0;
                 if (auftraege.length > 0) statusZeichnen(auftraege);
 
-                const laeuft = auftraege.some(function(a) { return a.Status === 'Laufend'; });
+                const laeuft = auftraege.some(function(a) { return a.Status === 'Running'; });
 
                 if (laeuft) {
                     statusZeitgeber = setTimeout(statusAbfragen, 3000);
@@ -6151,14 +6439,14 @@ $LightCSS
         function statusZeichnen(auftraege) {
             let fehlerhaft = false;
             auftraege.forEach(function(a) {
-                if (a.Status === 'Fehlgeschlagen' || a.Fehler > 0) fehlerhaft = true;
+                if (a.Status === 'Failed' || a.Fehler > 0) fehlerhaft = true;
             });
 
             let html = '';
 
             auftraege.slice(0, 10).forEach(function(a) {
-                const laeuft    = (a.Status === TXT('statusRunning'));
-                const kopfFarbe = laeuft ? '#0078d4' : (a.Status === TXT('statusCompleted') && a.Fehler === 0 ? '#28a745' : '#dc3545');
+                const laeuft    = (a.Status === 'Running');
+                const kopfFarbe = laeuft ? '#0078d4' : (a.Status === 'Completed' && a.Fehler === 0 ? '#28a745' : '#dc3545');
                 // Ohne Art liegt ein Auftrag aus alter Version vor - dann
                 // gilt wie bisher 'Verschiebung'.
                 const art       = a.Art || 'Verschiebung';
@@ -6185,9 +6473,14 @@ $LightCSS
                             : '');
                 }
 
+                const statusAnzeige = a.Status === 'Running' ? TXT('statusRunning')
+                                  : (a.Status === 'Completed' ? TXT('statusCompleted')
+                                  : (a.Status === 'Failed' ? TXT('statusFailed')
+                                  : a.Status));
+
                 html += '<div style="margin-top:6px;">' +
                     '<strong style="color:' + kopfFarbe + ';">#' + escapeHtml(a.Id) + ' ' +
-                        escapeHtml(a.Status) + '</strong>' +
+                        escapeHtml(statusAnzeige) + '</strong>' +
                     kopfText +
                     (a.BatchName ? ' | ' + TXT('batchLabel').replace('%Value%', escapeHtml(a.BatchName)) : '') +
                     ' | ' + TXT('startLabel').replace('%Value%', escapeHtml(a.Start)) +
@@ -6397,10 +6690,14 @@ function Update-UpdateCheckStatus {
     }
 
     if ($script:UpdateStatus.UpdateAvailable) {
-        Write-Log -Nachricht "Update verfuegbar: $($script:UpdateStatus.LatestTag) (aktuell v$(Get-SkriptVersion)) - $($script:UpdateStatus.Url)" -Typ "INFO"
+        Write-Log -Nachricht (TM 'log.updateAvailable' @{
+            Tag     = $script:UpdateStatus.LatestTag
+            Version = (Get-SkriptVersion)
+            Url     = $script:UpdateStatus.Url
+        }) -Typ "INFO"
     }
     else {
-        Write-Log -Nachricht "Update-Check abgeschlossen: keine neuere Version als v$(Get-SkriptVersion) gefunden." -Typ "INFO"
+        Write-Log -Nachricht (TM 'log.updateNone' @{ Version = (Get-SkriptVersion) }) -Typ "INFO"
     }
 }
 
@@ -6412,15 +6709,20 @@ try {
     # --- Log-Verzeichnis erstellen und Log-Stream öffnen -------------------
     if (-not (Test-Path -Path $LogVerzeichnis)) {
         New-Item -ItemType Directory -Path $LogVerzeichnis -Force | Out-Null
-        Write-Log -Nachricht "Log-Verzeichnis erstellt: $LogVerzeichnis" -Typ "INFO"
+        Write-Log -Nachricht (TM 'log.logDirCreated' @{ Path = $LogVerzeichnis }) -Typ "INFO"
     }
     Open-Log
 
-    Write-Log -Nachricht "=== Live-Dashboard wird gestartet ===" -Typ "INFO"
-    Write-Log -Nachricht "Intervall: $AktualisierungsIntervall s | Snapshot-Cache: $CacheIntervall s | Abfrage-Timeout: $AbfrageTimeout s | Leerlaufintervall: $LeerlaufIntervall s" -Typ "INFO"
-    if ($BatchName) { Write-Log -Nachricht "Batch-Filter aktiv: $BatchName" -Typ "INFO" }
+    Write-Log -Nachricht (TM 'log.startBanner') -Typ "INFO"
+    Write-Log -Nachricht (TM 'log.intervals' @{
+        Interval = $AktualisierungsIntervall
+        Cache    = $CacheIntervall
+        Timeout  = $AbfrageTimeout
+        Idle     = $LeerlaufIntervall
+    }) -Typ "INFO"
+    if ($BatchName) { Write-Log -Nachricht (TM 'log.batchFilter' @{ Batch = $BatchName }) -Typ "INFO" }
     if ($Light) {
-        Write-Log -Nachricht "Light-Modus aktiv (-Light): es werden nur Statusdaten geliefert - Get-MoveRequestStatistics bleibt aus, technische Spalten sind im Dashboard ausgeblendet." -Typ "INFO"
+        Write-Log -Nachricht (TM 'log.lightMode') -Typ "INFO"
     }
 
     # --- Erhoehte Rechte? Selber mit RunAs neu starten (v2.14) --------------
@@ -6433,7 +6735,7 @@ try {
     # Erhoehung weiter: Warnung im Log plus Hinweisdialog.
     if (-not (Test-IstAdministrator)) {
         if ([string]::IsNullOrWhiteSpace($PSCommandPath)) {
-            Write-Log -Nachricht "Ohne Admin-Rechte und ohne Skriptpfad (Start ueber eine Pipe?) - Weiterlauf ohne Erhoehung." -Typ "WARNUNG"
+            Write-Log -Nachricht (TM 'log.noAdminNoPath') -Typ "WARNUNG"
         }
         else {
             $ElevationsArgumente = New-ElevationsArgumente -SkriptPfad $PSCommandPath -GebundeneParameter $PSBoundParameters
@@ -6442,7 +6744,7 @@ try {
                               -Verb RunAs `
                               -ArgumentList $ElevationsArgumente `
                               -ErrorAction Stop
-                Write-Log -Nachricht "Ohne Admin-Rechte gestartet - Neustart als Administrator eingeleitet (UAC-Frage). Das Ausgangsfenster schliesst sich, der erhoehte Neustart uebernimmt." -Typ "INFO"
+                Write-Log -Nachricht (TM 'log.elevationRequested') -Typ "INFO"
                 exit 0
             }
             catch {
@@ -6454,11 +6756,11 @@ try {
                     $Abbruch = $true
                 }
                 if ($Abbruch) {
-                    Write-Log -Nachricht "Erhoehung abgelehnt (UAC) - das Skript laeuft NICHT als Administrator. System-/Arbitration-Postfaecher scheitern dann mit 'Der Zugriff wurde verweigert'." -Typ "WARNUNG"
+                    Write-Log -Nachricht (TM 'log.elevationDenied') -Typ "WARNUNG"
                     Show-ElevationsHinweis
                 }
                 else {
-                    Write-Log -Nachricht "Erhoehung fehlgeschlagen: $($_.Exception.Message) - Weiterlauf ohne Admin-Rechte." -Typ "WARNUNG"
+                    Write-Log -Nachricht (TM 'log.elevationFailed' @{ Error = $_.Exception.Message }) -Typ "WARNUNG"
                 }
             }
         }
@@ -6478,14 +6780,14 @@ try {
                                                  -MeldeFreieProzesse
 
     if ($PortZustand -eq "Belegt") {
-        Write-Log -Nachricht "Die andere Instanz laeuft weiter und haelt $PruefURL - Start abgebrochen." -Typ "FEHLER"
-        Write-Log -Nachricht "  Manuell suchen: Get-CimInstance Win32_Process | Where-Object { `$_.CommandLine -match 'Moverequest-Dashboard' } | Select-Object ProcessId, CommandLine" -Typ "INFO"
-        Write-Log -Nachricht "  Oder abweichend starten: .\Exchange-MoveRequest-Dashboard.ps1 -Port 9090" -Typ "INFO"
+        Write-Log -Nachricht (TM 'log.otherInstanceKeeps' @{ Url = $PruefURL }) -Typ "FEHLER"
+        Write-Log -Nachricht (TM 'log.manualSearch') -Typ "INFO"
+        Write-Log -Nachricht (TM 'log.startOtherPort') -Typ "INFO"
         throw "Port $Port ist durch eine andere Dashboard-Instanz belegt."
     }
 
     if ($PortZustand -eq "OhneStopp") {
-        Write-Log -Nachricht "Der Start wird voraussichtlich mit Fehler 32 scheitern - siehe Fehlerbehebung im Wiki." -Typ "WARNUNG"
+        Write-Log -Nachricht (TM 'log.expectedError32') -Typ "WARNUNG"
     }
 
     # --- Ausfuehrungskontext ins Log (v2.13) ------------------------------
@@ -6498,7 +6800,12 @@ try {
         $KontextIdent   = [System.Security.Principal.WindowsIdentity]::GetCurrent()
         $KontextAdmin   = (New-Object System.Security.Principal.WindowsPrincipal($KontextIdent)).IsInRole([System.Security.Principal.WindowsBuiltInRole]::Administrator)
         $KontextBitness = if ([Environment]::Is64BitProcess) { '64-Bit' } else { '32-Bit' }
-        Write-Log -Nachricht "Ausfuehrungskontext: $($KontextIdent.Name), Administrator: $KontextAdmin, PowerShell $($PSVersionTable.PSVersion) ($KontextBitness)" -Typ "INFO"
+        Write-Log -Nachricht (TM 'log.context' @{
+            Name    = $KontextIdent.Name
+            Admin   = $KontextAdmin
+            Version = $PSVersionTable.PSVersion
+            Bitness = $KontextBitness
+        }) -Typ "INFO"
     }
     catch { }
 
@@ -6506,15 +6813,15 @@ try {
     # Laeuft parallel zur ersten Sammlung und meldet sich erst beim
     # naechsten /api/data-Poll zurück - der Start wird nie blockiert.
     if ($KeinUpdateCheck) {
-        Write-Log -Nachricht "Update-Check deaktiviert (-KeinUpdateCheck)." -Typ "INFO"
+        Write-Log -Nachricht (TM 'log.updateDisabled') -Typ "INFO"
     }
     else {
         try {
             $script:UpdateCheckTask = Start-UpdateCheckAsync
-            Write-Log -Nachricht "Update-Check gegen GitLab-Releases gestartet (Projekt-ID $script:GitLabProjectId, asynchron)." -Typ "INFO"
+            Write-Log -Nachricht (TM 'log.updateStarted' @{ Id = $script:GitLabProjectId }) -Typ "INFO"
         }
         catch {
-            Write-Log -Nachricht "Update-Check konnte nicht gestartet werden: $($_.Exception.Message)" -Typ "WARNUNG"
+            Write-Log -Nachricht (TM 'log.updateStartFailed' @{ Error = $_.Exception.Message }) -Typ "WARNUNG"
         }
     }
 
@@ -6524,28 +6831,32 @@ try {
     # identisch.
     try {
         if (-not (Get-PSSnapin -Name Microsoft.Exchange.Management.PowerShell.SnapIn -ErrorAction SilentlyContinue)) {
-            Write-Log -Nachricht "Lade Exchange PowerShell Snap-In (2019/SE)..." -Typ "INFO"
+            Write-Log -Nachricht (TM 'log.snapinLoading') -Typ "INFO"
             Add-PSSnapin Microsoft.Exchange.Management.PowerShell.SnapIn -ErrorAction Stop
-            Write-Log -Nachricht "Exchange PowerShell Snap-In erfolgreich geladen." -Typ "INFO"
+            Write-Log -Nachricht (TM 'log.snapinLoaded') -Typ "INFO"
         }
         else {
-            Write-Log -Nachricht "Exchange PowerShell Snap-In ist bereits geladen." -Typ "INFO"
+            Write-Log -Nachricht (TM 'log.snapinAlreadyLoaded') -Typ "INFO"
         }
     }
     catch {
-        Write-Log -Nachricht "Fehler beim Laden des Exchange Snap-In: $($_.Exception.Message)" -Typ "FEHLER"
+        Write-Log -Nachricht (TM 'msg.snapinLoadFailed' @{ Error = $_.Exception.Message }) -Typ "FEHLER"
         throw "Exchange Snap-In konnte nicht geladen werden."
     }
 
     # --- Erste Datensammlung vor dem Serverstart ---------------------------
     # Dann ist der erste /api/data-Aufruf schnell und der Browser sieht
     # sofort Daten statt eines endlosen Spinners.
-    Write-Log -Nachricht "Erste Datensammlung wird durchgefuehrt ..." -Typ "INFO"
+    Write-Log -Nachricht (TM 'log.firstCollection') -Typ "INFO"
     $Erststand = Get-MoveRequestDaten
     if ($Erststand -and $Erststand.Gesamt -gt 0) {
-        Write-Log -Nachricht "Erste Sammlung (Grunddaten): $($Erststand.Gesamt) MoveRequest(s), $($Erststand.Details.Count) Detailzeile(n), $($Erststand.DauerSekunden)s" -Typ "INFO"
+        Write-Log -Nachricht (TM 'log.firstCollectionDone' @{
+            Count   = $Erststand.Gesamt
+            Details = $Erststand.Details.Count
+            Seconds = $Erststand.DauerSekunden
+        }) -Typ "INFO"
         if ($Erststand.DetailOffen -gt 0) {
-            Write-Log -Nachricht "Detaildaten (Prozent, Groessen, Zeiten) fuer $($Erststand.DetailOffen) Job(s) werden im naechsten Lauf nachgeholt." -Typ "INFO"
+            Write-Log -Nachricht (TM 'log.detailsLater' @{ Count = $Erststand.DetailOffen }) -Typ "INFO"
         }
     }
 
@@ -6571,7 +6882,7 @@ try {
                                                       -Phase "Startversuch $StartVersuch" `
                                                       -KeinAutoStopp:$KeinAutoStopp
         if ($ZustandJetzt -eq "Belegt") {
-            Write-Log -Nachricht "Das Praefix '$BaseURL' haelt weiterhin eine andere Instanz." -Typ "WARNUNG"
+            Write-Log -Nachricht (TM 'log.prefixHeld' @{ Url = $BaseURL }) -Typ "WARNUNG"
         }
 
         try {
@@ -6595,8 +6906,8 @@ try {
             # ueberhaupt gestoppt werden darf. Ohne Auto-Stopp muesste sich
             # die andere Instanz im Kreis selbst beenden (Ping-Pong).
             if ($IstPraefixKonflikt -and -not $KeinAutoStopp -and $StartVersuch -lt $MaxStartVersuche) {
-                Write-Log -Nachricht "Fehler beim Starten des HTTP-Servers: $StartFehler" -Typ "FEHLER"
-                Write-Log -Nachricht "Das URL-Praefix '$BaseURL' war zwischen Pruefung und Start belegt - neuer Versuch ($StartVersuch von $MaxStartVersuche) nach erneuter Freimachung." -Typ "WARNUNG"
+                Write-Log -Nachricht (TM 'log.serverStartFailed' @{ Error = $StartFehler }) -Typ "FEHLER"
+                Write-Log -Nachricht (TM 'log.prefixBusy' @{ Url = $BaseURL; Attempt = $StartVersuch; Max = $MaxStartVersuche }) -Typ "WARNUNG"
                 try { $Listener.Close() } catch { }
                 continue
             }
@@ -6606,34 +6917,34 @@ try {
     }
 
     if ($null -eq $StartFehler) {
-        Write-Log -Nachricht "HTTP-Server gestartet auf: $BaseURL" -Typ "INFO"
-        Write-Log -Nachricht "Dashboard im Browser oeffnen: $BaseURL" -Typ "INFO"
-        Write-Log -Nachricht "Zum Beenden: Strg+C oder im Dashboard 'Server stoppen' klicken." -Typ "INFO"
+        Write-Log -Nachricht (TM 'log.serverStarted' @{ Url = $BaseURL }) -Typ "INFO"
+        Write-Log -Nachricht (TM 'log.openBrowser' @{ Url = $BaseURL }) -Typ "INFO"
+        Write-Log -Nachricht (TM 'log.stopHint') -Typ "INFO"
     }
     else {
-        Write-Log -Nachricht "Fehler beim Starten des HTTP-Servers: $StartFehler" -Typ "FEHLER"
+        Write-Log -Nachricht (TM 'log.serverStartFailed' @{ Error = $StartFehler }) -Typ "FEHLER"
 
         # Win32 Fehler 32 = das URL-Praefix ist bereits registriert.
         # DER MOMENT IST ENTSCHEIDEND: ein Port-Check danach findet nichts
         # mehr, denn die gescheiterte Registrierung war sofort wieder frei.
         # Deshalb hier sofort festhalten, was gerade zu sehen war.
         if ($StartFehler -match 'anderen Prozess|zugreifen|sharing violation|Access is denied|Zugriff verweigert') {
-            Write-Log -Nachricht "URSACHE: Das URL-Praefix '$BaseURL' war schon vergeben - fast immer durch ein zweites Dashboard. Auch die alte Version 'live_moverequest_statistik.ps1' reserviert denselben Port." -Typ "FEHLER"
+            Write-Log -Nachricht (TM 'log.causePrefix' @{ Url = $BaseURL }) -Typ "FEHLER"
 
             foreach ($Instanz in @(Get-LaufendeDashboardInstanzen)) {
-                Write-Log -Nachricht "  Laufende Instanz: $Instanz" -Typ "INFO"
+                Write-Log -Nachricht (TM 'log.runningInstanceOnly' @{ Instance = $Instanz }) -Typ "INFO"
             }
             foreach ($Diagnose in @(Get-PortDiagnose -Port $Port)) {
-                Write-Log -Nachricht "  $Diagnose" -Typ "INFO"
+                Write-Log -Nachricht (TM 'log.diagnose' @{ Text = $Diagnose }) -Typ "INFO"
             }
 
-            Write-Log -Nachricht "ABHILFE 1: die andere Instanz beenden (Fenster schliessen bzw. PID beenden)." -Typ "INFO"
-            Write-Log -Nachricht "ABHILFE 2: abweichend starten: .\Exchange-MoveRequest-Dashboard.ps1 -Port 9090" -Typ "INFO"
-            Write-Log -Nachricht "ABHILFE 3: zum Nachsehen IM FEHLERFALL: netstat -ano | findstr :$Port  und  netsh http show urlacl | findstr :$Port" -Typ "INFO"
+            Write-Log -Nachricht (TM 'log.help1') -Typ "INFO"
+            Write-Log -Nachricht (TM 'log.help2') -Typ "INFO"
+            Write-Log -Nachricht (TM 'log.help3' @{ Port = $Port }) -Typ "INFO"
         }
 
-        Write-Log -Nachricht "TIPP: Skript als Administrator ausfuehren oder Port freigeben:" -Typ "INFO"
-        Write-Log -Nachricht "  netsh http add urlacl url=$BaseURL user=$env:USERDOMAIN\$env:USERNAME" -Typ "INFO"
+        Write-Log -Nachricht (TM 'log.tip') -Typ "INFO"
+        Write-Log -Nachricht (TM 'log.netshAcl' @{ Url = $BaseURL; User = "$env:USERDOMAIN\$env:USERNAME" }) -Typ "INFO"
         throw $StartFehler
     }
 
@@ -6641,10 +6952,10 @@ try {
     if (-not $KeinBrowser) {
         try {
             Start-Process $BaseURL
-            Write-Log -Nachricht "Browser geoeffnet." -Typ "INFO"
+            Write-Log -Nachricht (TM 'log.browserOpened') -Typ "INFO"
         }
         catch {
-            Write-Log -Nachricht "Browser konnte nicht automatisch geoeffnet werden." -Typ "WARNUNG"
+            Write-Log -Nachricht (TM 'log.browserFailed') -Typ "WARNUNG"
         }
     }
 
@@ -6697,7 +7008,7 @@ try {
                                       -StatusCode 200
                     }
                     catch {
-                        $JsonInhalt = [pscustomobject]@{ Fehler = "Datenbanken konnten nicht ermittelt werden: $($_.Exception.Message)" } |
+                        $JsonInhalt = [pscustomobject]@{ Fehler = (TM 'msg.databasesLoadFailed' @{ Error = $_.Exception.Message }) } |
                                        ConvertTo-Json -Compress
                         Sende-Antwort -Antwort $Antwort `
                                       -Inhalt $JsonInhalt `
@@ -6739,7 +7050,7 @@ try {
                                       -StatusCode 200
                     }
                     catch {
-                        $JsonInhalt = [pscustomobject]@{ Fehler = "Postfaecher konnten nicht geladen werden: $($_.Exception.Message)" } |
+                        $JsonInhalt = [pscustomobject]@{ Fehler = (TM 'msg.mailboxesLoadFailed' @{ Error = $_.Exception.Message }) } |
                                        ConvertTo-Json -Compress
                         Sende-Antwort -Antwort $Antwort `
                                       -Inhalt $JsonInhalt `
@@ -6749,12 +7060,12 @@ try {
                 }
 
                 "/api/move" {
-                    $Rueckgabe  = @{ Fehler = "Unvollstaendige Anfrage." }
+                    $Rueckgabe  = @{ Fehler = (TM 'msg.incompleteRequest') }
                     $StatusCode = 400
 
                     try {
                         if (-not $Anfrage.HasEntityBody) {
-                            throw "Kein Request-Body uebermittelt."
+                            throw (TM 'msg.noRequestBody')
                         }
 
                         $Leser   = New-Object System.IO.StreamReader($Anfrage.InputStream, [System.Text.Encoding]::UTF8)
@@ -6806,7 +7117,7 @@ try {
                         # Antwort auch dann gueltig, wenn eine Nebenausgabe
                         # (z.B. aus dem Logging) in der Pipeline landet.
                         if ($Rueckgabe -isnot [hashtable]) {
-                            $Rueckgabe = @{ Fehler = "Unerwartete Rueckmeldung vom Versand-Modul." }
+                            $Rueckgabe = @{ Fehler = (TM 'msg.unexpectedShippingResponse') }
                         }
 
                         if ($Rueckgabe.ContainsKey('Fehler')) { $StatusCode = 400 }
@@ -6825,12 +7136,12 @@ try {
                 }
 
                 "/api/move-aktion" {
-                    $Rueckgabe  = @{ Fehler = "Unvollstaendige Anfrage." }
+                    $Rueckgabe  = @{ Fehler = (TM 'msg.incompleteRequest') }
                     $StatusCode = 400
 
                     try {
                         if (-not $Anfrage.HasEntityBody) {
-                            throw "Kein Request-Body uebermittelt."
+                            throw (TM 'msg.noRequestBody')
                         }
 
                         $Leser   = New-Object System.IO.StreamReader($Anfrage.InputStream, [System.Text.Encoding]::UTF8)
@@ -6878,7 +7189,7 @@ try {
                         # Antwort auch dann gueltig, wenn eine Nebenausgabe
                         # (z.B. aus dem Logging) in der Pipeline landet.
                         if ($Rueckgabe -isnot [hashtable]) {
-                            $Rueckgabe = @{ Fehler = "Unerwartete Rueckmeldung vom Aktion-Modul." }
+                            $Rueckgabe = @{ Fehler = (TM 'msg.unexpectedActionResponse') }
                         }
 
                         if ($Rueckgabe.ContainsKey('Fehler')) { $StatusCode = 400 }
@@ -6907,7 +7218,7 @@ try {
                                       -StatusCode 200
                     }
                     catch {
-                        $JsonInhalt = [pscustomobject]@{ Fehler = "Status konnte nicht ermittelt werden: $($_.Exception.Message)" } |
+                        $JsonInhalt = [pscustomobject]@{ Fehler = (TM 'msg.statusLoadFailed' @{ Error = $_.Exception.Message }) } |
                                        ConvertTo-Json -Compress
                         Sende-Antwort -Antwort $Antwort `
                                       -Inhalt $JsonInhalt `
@@ -6921,7 +7232,7 @@ try {
                                   -Inhalt '{"status":"Server wird gestoppt..."}' `
                                   -ContentType "application/json; charset=utf-8" `
                                   -StatusCode 200
-                    Write-Log -Nachricht "Server-Stop angefordert." -Typ "WARNUNG"
+                    Write-Log -Nachricht (TM 'log.serverStopRequested') -Typ "WARNUNG"
                     $script:ServerLaeuft = $false
                 }
 
@@ -6943,16 +7254,16 @@ try {
                 # ohnehin sauber runter, darum gehoert das nicht als WARNUNG
                 # ins Log (frueher kam hier "Der angegebene Netzwerkname ist
                 # nicht mehr verfuegbar").
-                Write-Log -Nachricht "Verbindung vom Browser geschlossen - Anfrage abgebrochen (beim Stoppen oder Schliessen des Tabs ganz normal)." -Typ "STILL"
+                Write-Log -Nachricht (TM 'log.connectionClosed') -Typ "STILL"
             }
             else {
-                Write-Log -Nachricht "HTTP-Listener Fehler: $($_.Exception.Message)" -Typ "WARNUNG"
+                Write-Log -Nachricht (TM 'log.listenerError' @{ Error = $_.Exception.Message }) -Typ "WARNUNG"
             }
         }
         catch {
             # Abbruch durch den Browser ist normal (Timeout, Tab geschlossen)
             # und darf nicht das Log fluten.
-            Write-Log -Nachricht "Fehler bei Anfrageverarbeitung: $($_.Exception.Message)" -Typ "STILL"
+            Write-Log -Nachricht (TM 'log.requestError' @{ Error = $_.Exception.Message }) -Typ "STILL"
         }
         finally {
             # ================================================================
@@ -6969,20 +7280,20 @@ try {
     }
 }
 catch {
-    Write-Log -Nachricht "KRITISCHER FEHLER: $($_.Exception.Message)" -Typ "FEHLER"
-    Write-Log -Nachricht "Stack Trace: $($_.ScriptStackTrace)" -Typ "FEHLER"
-    Write-Error "Skript wurde mit Fehlern beendet. Details siehe Log: $LogDateiPfad"
+    Write-Log -Nachricht (TM 'log.critical' @{ Error = $_.Exception.Message }) -Typ "FEHLER"
+    Write-Log -Nachricht (TM 'log.stack' @{ Trace = $_.ScriptStackTrace }) -Typ "FEHLER"
+    Write-Error (TM 'log.scriptFailed' @{ Path = $LogDateiPfad })
 }
 finally {
     try {
         if ($Listener -and $Listener.IsListening) {
             $Listener.Stop()
             $Listener.Close()
-            Write-Log -Nachricht "HTTP-Server sauber heruntergefahren." -Typ "INFO"
+            Write-Log -Nachricht (TM 'log.serverStopped') -Typ "INFO"
         }
     }
     catch {
-        Write-Log -Nachricht "Fehler beim Beenden des HTTP-Servers: $($_.Exception.Message)" -Typ "WARNUNG"
+        Write-Log -Nachricht (TM 'log.stopFailed' @{ Error = $_.Exception.Message }) -Typ "WARNUNG"
     }
 
     # Update-Check-Runspace freigeben, falls das Ergebnis noch offen ist.
@@ -6998,16 +7309,21 @@ finally {
         $VersandJobs = Get-Job -Name "WebGUI_Verschiebung", "WebGUI_MoveAktion" -ErrorAction SilentlyContinue
         if ($VersandJobs) {
             $VersandJobs | Remove-Job -Force -ErrorAction SilentlyContinue
-            Write-Log -Nachricht "Offene Verschiebe-Jobs beendet." -Typ "INFO"
+            Write-Log -Nachricht (TM 'log.jobsStopped') -Typ "INFO"
         }
     }
     catch {
-        Write-Log -Nachricht "Fehler beim Beenden der Verschiebe-Jobs: $($_.Exception.Message)" -Typ "WARNUNG"
+        Write-Log -Nachricht (TM 'log.jobsStopFailed' @{ Error = $_.Exception.Message }) -Typ "WARNUNG"
     }
 
     $Laufzeit = [math]::Round(((Get-Date) - $script:StartZeit).TotalMinutes, 1)
-    Write-Log -Nachricht "Laufzeit: $Laufzeit min | $($script:Sammlungen) Sammlung(en), $($script:ExchangeAbfragen) Statistikabruf(e), $($script:CacheTreffer) Cache-Treffer" -Typ "STILL"
-    Write-Log -Nachricht "=== Live-Dashboard beendet ===" -Typ "INFO"
+    Write-Log -Nachricht (TM 'log.runtime' @{
+        Minutes    = $Laufzeit
+        Collections = $script:Sammlungen
+        Queries     = $script:ExchangeAbfragen
+        CacheHits   = $script:CacheTreffer
+    }) -Typ "STILL"
+    Write-Log -Nachricht (TM 'log.endBanner') -Typ "INFO"
 
     Close-Log
 }
